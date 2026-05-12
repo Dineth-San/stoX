@@ -1,4 +1,10 @@
 
-data/
+# Data files — actual data tracked by DVC, not git
+# .dvc pointer files ARE committed to git
+data/raw/
+data/cleaned/*.parquet
+data/cleaned/*.csv
+data/aligned/
+data/features/
 mlruns/
 models/

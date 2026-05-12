@@ -1,0 +1,5 @@
+outs:
+- md5: b6705d778a416c93531ee4d37c1baa23
+  size: 1282146
+  hash: md5
+  path: market_context.parquet

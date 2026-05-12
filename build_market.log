@@ -1,0 +1,91 @@
+17:49:33  INFO      ============================================================
+17:49:33  INFO      stoX — Phase 1+2: Build market context dataset
+17:49:33  INFO      ============================================================
+17:49:33  INFO      
+[1/3] Loading market context files ...
+17:49:33  INFO      Loading market indices from 07Market Indices - Daily.xls ...
+17:49:35  INFO        -> 9,773 rows | 1985-01-02 to 2025-12-31
+17:49:35  INFO      Loading TRI from 09Total Returns Indices - Daily.xls ...
+17:49:37  INFO        -> 5,239 rows | 1970-01-01 to 2025-12-31
+17:49:37  INFO      Loading market ratios from 10Market Ratios - Daily.xls ...
+17:49:38  INFO        -> 7,165 rows | 1996-01-02 to 2025-12-31
+17:49:38  INFO      Loading daily market stats from 11Market Statistics-Daily.xls ...
+17:49:39  INFO        -> 7,635 rows | 1994-01-03 to 2025-12-31
+17:49:39  INFO      Merging all market context files on date ...
+17:49:39  INFO      Merged market context: 9,780 rows | 57 columns
+17:49:39  INFO      
+[2/3] Cleaning ...
+17:49:39  INFO      Cleaning market context: 9,780 rows, 57 columns
+17:49:39  INFO        Dropped 8 duplicate dates
+17:49:39  INFO        ML slice (2011+): 3,565 rows
+17:49:39  INFO      
+--- Quality report (ML slice) ---
+17:49:39  INFO      === [2011+] MARKET CONTEXT QUALITY REPORT ===
+17:49:39  INFO        Rows    : 3,565
+17:49:39  INFO        Columns : 57
+17:49:39  INFO        Dates   : 2011-01-03 to 2025-12-31
+17:49:39  INFO        Coverage per column (% non-null):
+17:49:39  INFO          aspi                          : 100.0%
+17:49:39  INFO          mpi                           :  45.6%
+17:49:39  INFO          sl20_index                    :  90.0%
+17:49:39  INFO          sector_bfi                    : 100.0%
+17:49:39  INFO          sector_bft                    : 100.0%
+17:49:39  INFO          sector_cp                     : 100.0%
+17:49:39  INFO          sector_ce                     : 100.0%
+17:49:39  INFO          sector_div                    : 100.0%
+17:49:39  INFO          sector_ft                     : 100.0%
+17:49:39  INFO          sector_hlt                    : 100.0%
+17:49:39  INFO          sector_ht                     : 100.0%
+17:49:39  INFO          sector_inv                    : 100.0%
+17:49:39  INFO          sector_it                     : 100.0%
+17:49:39  INFO          sector_lp                     : 100.0%
+17:49:39  INFO          sector_mfg                    : 100.0%
+17:49:39  INFO          sector_mtr                    : 100.0%
+17:49:39  INFO          sector_oil                    : 100.0%
+17:49:39  INFO          sector_plt                    :  65.0%
+17:49:39  INFO          sector_pe                     : 100.0%
+17:49:39  INFO          sector_srv                    : 100.0%
+17:49:39  INFO          sector_ss                     : 100.0%
+17:49:39  INFO          sector_tel                    : 100.0%
+17:49:39  INFO          sector_trd                    : 100.0%
+17:49:39  INFO          astri                         : 100.0%
+17:49:39  INFO          mtri                          :  15.1%
+17:49:39  INFO          sl20_tri                      :  90.0%
+17:49:39  INFO          tri_bfi                       : 100.0%
+17:49:39  INFO          tri_bft                       : 100.0%
+17:49:39  INFO          tri_cp                        : 100.0%
+17:49:39  INFO          tri_ce                        : 100.0%
+17:49:39  INFO          tri_div                       : 100.0%
+17:49:39  INFO          tri_ft                        : 100.0%
+17:49:39  INFO          tri_hlt                       : 100.0%
+17:49:39  INFO          tri_ht                        : 100.0%
+17:49:39  INFO          tri_inv                       : 100.0%
+17:49:39  INFO          tri_it                        : 100.0%
+17:49:39  INFO          tri_lp                        : 100.0%
+17:49:39  INFO          tri_mfg                       : 100.0%
+17:49:39  INFO          tri_mtr                       : 100.0%
+17:49:39  INFO          tri_oil                       : 100.0%
+17:49:39  INFO          tri_plt                       :  65.0%
+17:49:39  INFO          tri_pe                        : 100.0%
+17:49:39  INFO          tri_srv                       : 100.0%
+17:49:39  INFO          tri_ss                        : 100.0%
+17:49:39  INFO          tri_tel                       : 100.0%
+17:49:39  INFO          tri_trd                       : 100.0%
+17:49:39  INFO          market_per                    : 100.0%
+17:49:39  INFO          market_pbv                    : 100.0%
+17:49:39  INFO          market_dy                     : 100.0%
+17:49:39  INFO          equity_turnover_mn            : 100.0%
+17:49:39  INFO          debt_corp_000                 :  89.8%
+17:49:39  INFO          debt_govt_000                 :  30.2%
+17:49:39  INFO          funds_turnover_000            :  94.1%
+17:49:39  INFO          shares_traded_000             : 100.0%
+17:49:39  INFO          trades_equity                 : 100.0%
+17:49:39  INFO          market_cap_mn                 : 100.0%
+17:49:39  INFO      
+[3/3] Saving ...
+17:49:39  INFO      Saved to D:\stox\ml\data\cleaned\market_context_full.parquet  (2.2 MB)
+17:49:39  INFO      Saved to D:\stox\ml\data\cleaned\market_context.parquet  (1.2 MB)
+17:49:39  INFO      
+============================================================
+17:49:39  INFO      Done.
+17:49:39  INFO      ============================================================
