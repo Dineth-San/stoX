@@ -1,0 +1,72 @@
+18:59:35  INFO      ============================================================
+18:59:35  INFO      stoX — Phase 1+2: Build macro context datasets
+18:59:35  INFO      ============================================================
+18:59:35  INFO      
+[1/6] Loading CBSL exchange rates ...
+18:59:35  INFO      Loading exchange rates from exchange_rates.csv ...
+18:59:35  INFO        -> 4,265 rows | 2010-01-04 to 2026-05-08 | NaN usd_lkr: 175
+18:59:35  INFO      
+[2/6] Loading CBSL policy rates ...
+18:59:35  INFO      Loading policy rates from 20250522_historical_policy_interest_rates.xlsx ...
+18:59:36  INFO        -> 93 rate-change events | 2000-01-05 to 2025-05-22
+18:59:36  INFO      
+[3/6] Cleaning + saving CBSL data ...
+18:59:36  INFO      Cleaning CBSL macro data ...
+18:59:36  INFO      === CBSL QUALITY REPORT ===
+18:59:36  INFO        Rows   : 5,479
+18:59:36  INFO        Dates  : 2011-01-01 to 2025-12-31
+18:59:36  INFO        usd_lkr               : min=109.25  max=365.43  null=0
+18:59:36  INFO        sdf_rate              : min=4.50  max=14.50  null=0
+18:59:36  INFO        slf_rate              : min=5.50  max=15.50  null=0
+18:59:36  INFO        policy_rate_mid       : min=5.00  max=15.00  null=0
+18:59:37  INFO      Saved to D:\stox\ml\data\cleaned\cbsl.parquet  (0.1 MB)
+18:59:37  INFO      
+[4/6] Loading World Bank WDI (GDP / CPI / unemployment) ...
+18:59:37  INFO      Loading WDI indicators from GDP.csv ...
+18:59:37  INFO        Extracting 4 indicators for LKA
+18:59:37  INFO        gdp_growth_pct         (NY.GDP.MKTP.KD.ZG): 63 annual values, latest: 2024
+18:59:37  INFO        gdp_constant_usd       (NY.GDP.MKTP.KD): 64 annual values, latest: 2024
+18:59:37  INFO        inflation_pct          (FP.CPI.TOTL.ZG): 65 annual values, latest: 2024
+18:59:37  INFO        unemployment_pct       (SL.UEM.TOTL.ZS): 35 annual values, latest: 2025
+18:59:37  INFO        -> 66 annual rows | years 1960–2025
+18:59:37  INFO      
+[4b] Cleaning + saving GDP data ...
+18:59:37  INFO      Cleaning GDP / WDI macro data ...
+18:59:37  INFO      === GDP / WDI QUALITY REPORT ===
+18:59:37  INFO        Rows    : 15
+18:59:37  INFO        Years   : 2011 - 2025
+18:59:37  INFO        gdp_growth_pct        : 14/15 non-null | range [-7.35, 8.67]
+18:59:37  INFO        gdp_constant_usd      : 14/15 non-null | range [67909090095.75, 97364084798.83]
+18:59:37  INFO        inflation_pct         : 14/15 non-null | range [-0.43, 49.72]
+18:59:37  INFO        unemployment_pct      : 15/15 non-null | range [3.88, 5.36]
+18:59:37  INFO      Saved to D:\stox\ml\data\cleaned\gdp.parquet  (0.0 MB)
+18:59:37  INFO      
+[5/6] Fetching / loading FRED global macro data ...
+18:59:37  WARNING   FRED_API_KEY not set — will use yfinance fallback where available. Add FRED_API_KEY to your .env file for full FRED access.
+18:59:56  INFO        oil_wti         : fetched from yfinance (CL=F) | 4,023 observations
+18:59:58  INFO        sp500           : fetched from yfinance (^GSPC) | 4,023 observations
+19:00:00  INFO        vix             : fetched from yfinance (^VIX) | 4,023 observations
+19:00:01  INFO        us_10y_yield    : fetched from yfinance (^TNX) | 4,021 observations
+19:00:02  INFO        dxy             : fetched from yfinance (DX-Y.NYB) | 4,024 observations
+19:00:03  INFO        gold            : fetched from yfinance (GC=F) | 4,022 observations
+19:00:03  INFO      FRED data loaded: 4,027 rows | 2010-01-04 to 2025-12-30 | columns: ['oil_wti', 'sp500', 'vix', 'us_10y_yield', 'dxy', 'gold']
+19:00:03  INFO      
+[6/6] Cleaning + saving FRED data ...
+19:00:03  INFO      Cleaning FRED global macro data ...
+19:00:03  INFO      === FRED QUALITY REPORT ===
+19:00:03  INFO        Rows   : 5,476
+19:00:03  INFO        Dates  : 2011-01-03 to 2025-12-30
+19:00:03  INFO        oil_wti         : coverage 100.0% | null=0 | range [-37.6, 123.7]
+19:00:03  INFO        sp500           : coverage 100.0% | null=0 | range [1099.2, 6932.0]
+19:00:03  INFO        vix             : coverage 100.0% | null=0 | range [9.1, 82.7]
+19:00:03  INFO        us_10y_yield    : coverage 100.0% | null=0 | range [0.5, 5.0]
+19:00:03  INFO        dxy             : coverage 100.0% | null=0 | range [72.9, 114.1]
+19:00:03  INFO        gold            : coverage 100.0% | null=0 | range [1050.8, 4529.1]
+19:00:03  INFO      Saved to D:\stox\ml\data\cleaned\fred.parquet  (0.2 MB)
+19:00:03  INFO      
+============================================================
+19:00:03  INFO      Done.  Output files:
+19:00:03  INFO        CBSL  : D:\stox\ml\data\cleaned\cbsl.parquet  (0.1 MB)
+19:00:03  INFO        GDP   : D:\stox\ml\data\cleaned\gdp.parquet  (0.0 MB)
+19:00:03  INFO        FRED  : D:\stox\ml\data\cleaned\fred.parquet  (0.2 MB)
+19:00:03  INFO      ============================================================

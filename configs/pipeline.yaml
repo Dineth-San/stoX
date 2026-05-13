@@ -44,13 +44,14 @@ paths:
     news_gdelt:   data/raw/news/gdelt
     fundamentals: data/raw/fundamentals
   cleaned:
-    prices:            data/cleaned/master_prices.parquet
-    market_context:    data/cleaned/market_context.parquet
+    prices:              data/cleaned/master_prices.parquet
+    market_context:      data/cleaned/market_context.parquet
     market_context_full: data/cleaned/market_context_full.parquet
-    cbsl:              data/cleaned/cbsl.parquet
-    fred:              data/cleaned/fred.parquet
-    news:              data/cleaned/news.parquet
-    fundamentals:      data/cleaned/fundamentals.parquet
+    cbsl:                data/cleaned/cbsl.parquet        # exchange rates + policy rates (daily)
+    gdp:                 data/cleaned/gdp.parquet         # GDP, CPI, unemployment (annual)
+    fred:                data/cleaned/fred.parquet        # global macro: oil, S&P500, VIX, gold (daily)
+    news:                data/cleaned/news.parquet
+    fundamentals:        data/cleaned/fundamentals.parquet
   aligned:
     panel:        data/aligned/sl20_daily_panel.parquet
   features:
@@ -59,6 +60,24 @@ paths:
     dictionary:   data/features/data_dictionary.md
     validation:   data/features/validation_report.md
   models:         models/
+
+# ── FRED series to fetch ──────────────────────────────────────────────────────
+# Each entry: output_column: [fred_series_id, yfinance_fallback_ticker]
+# yfinance fallback used when FRED_API_KEY is not set
+fred_series:
+  oil_wti:      ["DCOILWTICO",         "CL=F"]
+  sp500:        ["SP500",              "^GSPC"]
+  vix:          ["VIXCLS",             "^VIX"]
+  us_10y_yield: ["DGS10",              "^TNX"]
+  dxy:          ["DTWEXBGS",           "DX-Y.NYB"]
+  gold:         ["GOLDAMGBD228NLBM",   "GC=F"]
+
+# ── World Bank WDI indicators to extract from GDP.csv ─────────────────────────
+wdi_indicators:
+  gdp_growth_pct:   "NY.GDP.MKTP.KD.ZG"   # GDP growth (annual %)
+  gdp_constant_usd: "NY.GDP.MKTP.KD"       # Real GDP (constant 2015 US$)
+  inflation_pct:    "FP.CPI.TOTL.ZG"       # CPI inflation (annual %)
+  unemployment_pct: "SL.UEM.TOTL.ZS"       # Unemployment rate (%)
 
 # ── CSE source files (within paths.raw.cse) ───────────────────────────────────
 cse_files:
