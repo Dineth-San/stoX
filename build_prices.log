@@ -1,61 +1,76 @@
-17:47:27  INFO      ============================================================
-17:47:27  INFO      stoX — Phase 1+2: Build master price dataset
-17:47:27  INFO      ============================================================
-17:47:27  INFO      
-[1/3] Loading raw price files ...
-17:47:27  INFO      Loading 2011 (block) from 2011 Data.xls ...
-17:47:32  INFO        -> 57,599 rows | 262 tickers
-17:47:32  INFO      Loading 2012 (block) from 2012 Data.xls ...
-17:47:37  INFO        -> 61,220 rows | 281 tickers
-17:47:37  INFO      Loading 2013 (block) from 2013 Data.xls ...
-17:47:42  INFO        -> 61,153 rows | 279 tickers
-17:47:42  INFO      Loading 2014 (block) from 2014 Data.xls ...
-17:47:47  INFO        -> 62,963 rows | 285 tickers
-17:47:47  INFO      Loading 2015 (block) from 2015 Data.xls ...
-17:47:52  INFO        -> 58,392 rows | 279 tickers
-17:47:52  INFO      Loading 2016 (flat_xls) from 2016 Data.xls ...
-17:47:56  INFO        -> 54,849 rows | 280 tickers
-17:47:56  INFO      Loading 2017 (flat_xls) from 2017 Data.xls ...
-17:48:01  INFO        -> 56,252 rows | 281 tickers
-17:48:01  INFO      Loading 2018 (flat_xls) from 2018 Data.xls ...
-17:48:08  INFO        -> 53,921 rows | 281 tickers
-17:48:08  INFO      Loading 2019 (flat_xls) from 2019 Data.xls ...
-17:48:14  INFO        -> 52,946 rows | 277 tickers
-17:48:14  INFO      Loading 2020 (flat_xls) from 2020 Data.xls ...
-17:48:20  INFO        -> 50,925 rows | 267 tickers
-17:48:20  INFO      Loading 2021 (flat_xls) from 2021 Data.xls ...
-17:48:28  INFO        -> 63,171 rows | 280 tickers
-17:48:28  INFO      Loading 2022 (flat_xls) from 2022 Data.xls ...
-17:48:34  INFO        -> 61,093 rows | 283 tickers
-17:48:34  INFO      Loading 2023 (csv) from 2023 Data.csv ...
-17:48:39  INFO        -> 62,501 rows | 276 tickers
-17:48:39  INFO      Loading 2024 (flat_xls) from 2024 Data.xls ...
-17:48:47  INFO        -> 63,332 rows | 275 tickers
-17:48:47  INFO      Loading 2025 (flat_xlsx) from 2025 Data.xlsx ...
-17:49:12  INFO        -> 67,541 rows | 276 tickers
-17:49:13  INFO      Raw loaded: 887,858 rows | 337 tickers
-17:49:13  INFO      
-[2/3] Cleaning ...
-17:49:13  INFO      Starting clean: 887,858 rows
-17:49:13  INFO      After dedup: 824,398 rows (removed 63,460)
-17:49:13  INFO      After close>=0.01 filter: 824,398 rows (removed 0)
-17:49:15  WARNING   Found 52,252 rows with OHLC inconsistencies (high<low, high<close, or low>close). Rows are kept and flagged with ohlc_inconsistent=True.
-17:49:15  WARNING   Found 2,606 rows with |daily_return| > 50% — likely data errors or corporate actions (splits, bonuses). These are kept in the dataset but flagged.
-17:49:15  INFO      Clean complete: 824,398 rows | 337 tickers
-17:49:15  INFO      
+20:03:02  INFO      ============================================================
+20:03:02  INFO      stoX — Phase 1+2: Build master price dataset
+20:03:02  INFO      ============================================================
+20:03:02  INFO      
+[1/4] Loading raw price files ...
+20:03:02  INFO      Loading 2011 (block) from 2011 Data.xls ...
+20:03:06  INFO        -> 57,599 rows | 262 tickers
+20:03:06  INFO      Loading 2012 (block) from 2012 Data.xls ...
+20:03:12  INFO        -> 61,220 rows | 281 tickers
+20:03:12  INFO      Loading 2013 (block) from 2013 Data.xls ...
+20:03:17  INFO        -> 61,153 rows | 279 tickers
+20:03:17  INFO      Loading 2014 (block) from 2014 Data.xls ...
+20:03:21  INFO        -> 62,963 rows | 285 tickers
+20:03:21  INFO      Loading 2015 (block) from 2015 Data.xls ...
+20:03:24  INFO        -> 58,392 rows | 279 tickers
+20:03:24  INFO      Loading 2016 (flat_xls) from 2016 Data.xls ...
+20:03:28  INFO        -> 54,849 rows | 280 tickers
+20:03:28  INFO      Loading 2017 (flat_xls) from 2017 Data.xls ...
+20:03:32  INFO        -> 56,252 rows | 281 tickers
+20:03:32  INFO      Loading 2018 (flat_xls) from 2018 Data.xls ...
+20:03:37  INFO        -> 53,921 rows | 281 tickers
+20:03:37  INFO      Loading 2019 (flat_xls) from 2019 Data.xls ...
+20:03:42  INFO        -> 52,946 rows | 277 tickers
+20:03:42  INFO      Loading 2020 (flat_xls) from 2020 Data.xls ...
+20:03:46  INFO        -> 50,925 rows | 267 tickers
+20:03:46  INFO      Loading 2021 (flat_xls) from 2021 Data.xls ...
+20:03:51  INFO        -> 63,171 rows | 280 tickers
+20:03:51  INFO      Loading 2022 (flat_xls) from 2022 Data.xls ...
+20:03:55  INFO        -> 61,093 rows | 283 tickers
+20:03:55  INFO      Loading 2023 (csv) from 2023 Data.csv ...
+20:03:59  INFO        -> 62,501 rows | 276 tickers
+20:03:59  INFO      Loading 2024 (flat_xls) from 2024 Data.xls ...
+20:04:04  INFO        -> 63,332 rows | 275 tickers
+20:04:04  INFO      Loading 2025 (flat_xlsx) from 2025 Data.xlsx ...
+20:04:25  INFO        -> 67,541 rows | 276 tickers
+20:04:25  INFO      Raw loaded: 887,858 rows | 337 tickers
+20:04:25  INFO      
+[2/4] Cleaning ...
+20:04:25  INFO      Starting clean: 887,858 rows
+20:04:26  INFO      After dedup: 824,398 rows (removed 63,460)
+20:04:26  INFO      After close>=0.01 filter: 824,398 rows (removed 0)
+20:04:27  WARNING   Found 52,252 rows with OHLC inconsistencies (high<low, high<close, or low>close). Rows are kept and flagged with ohlc_inconsistent=True.
+20:04:27  WARNING   Found 2,606 rows with |daily_return| > 50% — likely data errors or corporate actions (splits, bonuses). These are kept in the dataset but flagged.
+20:04:27  INFO      Clean complete: 824,398 rows | 337 tickers
+20:04:27  INFO      
+[3/4] Loading corporate actions + computing adjusted close ...
+20:04:27  INFO      Loading dividends from 01Dividends.xls ...
+20:04:32  INFO        -> 2,110 dividend events for 243 tickers
+20:04:32  INFO      Loading scrip dividends from 02Scrip Dividends.xls ...
+20:04:32  INFO        -> 32 scrip_div events for 6 tickers
+20:04:32  INFO      Loading bonus issues from 03Capitalization of Reserves (Bonus Issues).xls ...
+20:04:32  INFO        -> 0 bonus events (none matched SL20 tickers)
+20:04:32  INFO      Loading splits from 05Sub Division (Share Splits).xls ...
+20:04:32  INFO        -> 61 split events for 59 tickers
+20:04:32  INFO      Corporate actions (SL20 only): 363 total events
+20:04:32  INFO        dividend    :  327
+20:04:32  INFO        scrip_div   :   32
+20:04:32  INFO        split       :    4
+20:04:34  INFO      adj_close computed: 64,595 rows differ from close (7.8% of dataset)
+20:04:34  INFO      
 --- Quality report ---
-17:49:15  INFO      === DATA QUALITY REPORT ===
-17:49:15  INFO      Total rows       : 824,398
-17:49:15  INFO      Unique tickers   : 337
-17:49:15  INFO      Date range       : 2011-01-03 to 2025-12-31
-17:49:15  INFO      Years covered    : [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
-17:49:15  INFO      Missing open     : 298
-17:49:15  INFO      Missing high     : 57
-17:49:15  INFO      Missing low      : 123
-17:49:15  INFO      Missing volume   : 0
-17:49:15  INFO      OHLC inconsistent: 52,252
-17:49:15  INFO      Suspicious moves : 2,606
-17:49:16  INFO      Top 5 tickers by trading days:
+20:04:34  INFO      === DATA QUALITY REPORT ===
+20:04:34  INFO      Total rows       : 824,398
+20:04:35  INFO      Unique tickers   : 337
+20:04:35  INFO      Date range       : 2011-01-03 to 2025-12-31
+20:04:35  INFO      Years covered    : [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+20:04:35  INFO      Missing open     : 298
+20:04:35  INFO      Missing high     : 57
+20:04:35  INFO      Missing low      : 123
+20:04:35  INFO      Missing volume   : 0
+20:04:35  INFO      OHLC inconsistent: 52,252
+20:04:35  INFO      Suspicious moves : 2,606
+20:04:35  INFO      Top 5 tickers by trading days:
 ticker
 SEYB    3565
 TKYO    3564
@@ -63,7 +78,7 @@ DIAL    3564
 RICH    3563
 LGL     3563
 Name: date, dtype: int64
-17:49:16  INFO      Bottom 5 tickers by trading days:
+20:04:35  INFO      Bottom 5 tickers by trading days:
 ticker
 CALH    145
 MERC     49
@@ -71,10 +86,11 @@ JFP      29
 INME     21
 ASPM      8
 Name: date, dtype: int64
-17:49:16  INFO      
-[3/3] Saving ...
-17:49:19  INFO      Saved to D:\stox\ml\data\cleaned\master_prices.parquet  (18.1 MB)
-17:49:19  INFO      
+20:04:35  INFO      
+[4/4] Saving ...
+20:04:36  INFO      Saved to D:\stox\ml\data\cleaned\master_prices.parquet  (19.6 MB)
+20:04:36  INFO      
 ============================================================
-17:49:19  INFO      Done.  Output: D:\stox\ml\data\cleaned\master_prices.parquet
-17:49:19  INFO      ============================================================
+20:04:36  INFO      Done.  Output: D:\stox\ml\data\cleaned\master_prices.parquet
+20:04:36  INFO        Columns: ['ticker', 'date', 'open', 'high', 'low', 'close', 'volume', 'turnover', 'trades', 'year', 'daily_return', 'ohlc_inconsistent', 'suspicious_move', 'adj_close']
+20:04:36  INFO      ============================================================

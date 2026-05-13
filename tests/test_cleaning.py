@@ -99,9 +99,33 @@ def test_sl20_minimum_trading_days(prices):
 def test_required_columns_present(prices):
     required = ["ticker", "date", "open", "high", "low", "close",
                 "volume", "turnover", "trades", "year",
-                "daily_return", "ohlc_inconsistent", "suspicious_move"]
+                "daily_return", "ohlc_inconsistent", "suspicious_move", "adj_close"]
     missing = [c for c in required if c not in prices.columns]
     assert missing == [], f"Missing columns: {missing}"
+
+
+def test_adj_close_positive(prices):
+    bad = prices[prices["adj_close"] <= 0]
+    assert len(bad) == 0, f"Found {len(bad)} rows with adj_close <= 0"
+
+
+def test_adj_close_anchored_to_latest(prices):
+    """Most recent date per ticker: adj_close must equal close (no future adjustments)."""
+    latest = prices.sort_values("date").groupby("ticker").last().reset_index()
+    mismatch = latest[
+        (latest["adj_close"] - latest["close"]).abs() > 0.01
+    ]
+    assert len(mismatch) == 0, (
+        f"{len(mismatch)} tickers have adj_close != close on their latest date:\n"
+        f"{mismatch[['ticker','date','close','adj_close']].head()}"
+    )
+
+
+def test_adj_close_ratio_plausible(prices):
+    """adj_close / close must be in (0.001, 10) — catches runaway compounding."""
+    ratio = prices["adj_close"] / prices["close"]
+    bad = prices[(ratio > 10) | (ratio < 0.001)]
+    assert len(bad) == 0, f"Implausible adj_close/close ratio in {len(bad)} rows"
 
 
 # ── Market context tests ──────────────────────────────────────────────────────

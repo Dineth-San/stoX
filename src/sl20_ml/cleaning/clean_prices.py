@@ -22,6 +22,79 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def add_adjusted_close(
+    prices_df: pd.DataFrame,
+    actions_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Add an `adj_close` column to the prices DataFrame using corporate action events.
+
+    Algorithm (standard backward-adjustment)
+    -----------------------------------------
+    For each ticker, we walk through corporate actions from most recent to oldest.
+    Each action multiplies all prices strictly BEFORE that date by the action's
+    factor.  The result is a continuous adjusted price series anchored to the
+    most recent price (i.e. today's close == today's adj_close).
+
+    Parameters
+    ----------
+    prices_df  : cleaned prices DataFrame (must have: date, ticker, close)
+    actions_df : output of load_all_corporate_actions()
+                 columns: date, ticker, action_type, factor
+
+    Returns
+    -------
+    prices_df with new column `adj_close` (float).
+    Tickers with no corporate actions get adj_close == close.
+    """
+    if actions_df.empty:
+        logger.warning("No corporate actions provided — adj_close = close for all tickers.")
+        prices_df["adj_close"] = prices_df["close"]
+        return prices_df
+
+    # Work ticker-by-ticker for clarity and correctness
+    result_parts = []
+    tickers_with_actions = set(actions_df["ticker"].unique())
+
+    for ticker, grp in prices_df.groupby("ticker"):
+        grp = grp.sort_values("date").copy()
+
+        if ticker not in tickers_with_actions:
+            grp["adj_close"] = grp["close"]
+            result_parts.append(grp)
+            continue
+
+        # Cumulative adjustment factor per row (starts at 1.0 = most recent date)
+        ticker_actions = (
+            actions_df[actions_df["ticker"] == ticker]
+            .sort_values("date", ascending=False)   # newest first
+            .reset_index(drop=True)
+        )
+
+        # For each price row, the adjustment factor is the product of all
+        # corporate action factors that occurred AFTER that row's date.
+        cum_factor = np.ones(len(grp), dtype=float)
+        for _, action in ticker_actions.iterrows():
+            action_date = action["date"]
+            factor      = action["factor"]
+            # All rows with date < action_date get multiplied by this factor
+            mask = grp["date"] < action_date
+            cum_factor[mask.values] *= factor
+
+        grp["adj_close"] = (grp["close"] * cum_factor).round(4)
+        result_parts.append(grp)
+
+    out = pd.concat(result_parts, ignore_index=True)
+    out = out.sort_values(["ticker", "date"]).reset_index(drop=True)
+
+    n_adjusted = (out["adj_close"] != out["close"]).sum()
+    logger.info(
+        f"adj_close computed: {n_adjusted:,} rows differ from close "
+        f"({n_adjusted / len(out):.1%} of dataset)"
+    )
+    return out
+
+
 def clean(df: pd.DataFrame, cfg: dict | None = None) -> pd.DataFrame:
     """
     Run all cleaning steps on the raw merged price DataFrame.
