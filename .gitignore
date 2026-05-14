@@ -4,7 +4,9 @@
 data/raw/
 data/cleaned/*.parquet
 data/cleaned/*.csv
-data/aligned/
-data/features/
+data/aligned/*.parquet
+data/aligned/*.csv
+data/features/*.parquet
+data/features/*.csv
 mlruns/
 models/
