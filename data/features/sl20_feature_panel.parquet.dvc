@@ -1,0 +1,5 @@
+outs:
+- md5: 5ba26303b7b7c37dc29dcb7fd310d064
+  size: 24791896
+  hash: md5
+  path: sl20_feature_panel.parquet
