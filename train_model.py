@@ -27,9 +27,9 @@ sys.path.insert(0, str(ML_DIR / "src"))
 import mlflow
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
-from pytorch_lightning.callbacks import (
+from lightning.pytorch.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
@@ -143,8 +143,8 @@ def main():
             "n_tickers":             df["ticker"].nunique(),
         })
 
-        # MLflow auto-logging for Lightning
-        mlflow.pytorch.autolog(log_every_n_epoch=1, silent=True)
+        # Note: mlflow.pytorch.autolog is incompatible with pf 1.x (class mismatch).
+        # We log metrics manually after training instead.
 
         trainer = pl.Trainer(
             max_epochs=model_cfg["max_epochs"],
