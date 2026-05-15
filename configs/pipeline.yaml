@@ -148,3 +148,22 @@ mlflow:
 # ── DVC ────────────────────────────────────────────────────────────────────────
 dvc:
   remote_name:   "local"           # Can be swapped to S3/GCS later
+
+# ── Model (TFT) ───────────────────────────────────────────────────────────────
+model:
+  encoder_length:            60    # Trading days of history fed to the model
+  prediction_length:          1    # Predict 1 day ahead
+  hidden_size:               32    # Embedding / hidden dim (small for 20-stock dataset)
+  attention_head_size:        2    # Number of multi-head attention heads
+  dropout:                  0.1
+  hidden_continuous_size:    16    # Continuous variable projection size
+  quantiles:               [0.1, 0.5, 0.9]   # P10, P50, P90
+  learning_rate:           3.0e-3
+  max_epochs:               50
+  batch_size:               64
+  val_batch_size:          128
+  early_stopping_patience:  10    # Epochs without val_loss improvement before stop
+  gradient_clip_val:        0.1
+  reduce_lr_patience:        5    # Epochs before LR is halved on plateau
+  accelerator:             "auto" # auto → CUDA if available, else CPU
+  checkpoint_dir:          "models/tft_v1"
