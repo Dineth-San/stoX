@@ -123,8 +123,8 @@ def main():
         accelerator = "cpu"
     logger.info(f"  Accelerator: {accelerator}")
 
-    # Set up MLflow
-    mlflow.set_tracking_uri(str(ml_dir / cfg["mlflow"]["tracking_uri"]))
+    # Set up MLflow — use file:// URI so Windows absolute paths work correctly
+    mlflow.set_tracking_uri((ml_dir / cfg["mlflow"]["tracking_uri"]).as_uri())
     mlflow.set_experiment(cfg["mlflow"]["experiment"])
 
     with mlflow.start_run(run_name="tft-v1-training") as run:

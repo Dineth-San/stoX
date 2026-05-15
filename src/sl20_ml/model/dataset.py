@@ -205,13 +205,15 @@ def build_tft_datasets(
         allow_missing_timesteps=False,
     )
 
+    # predict=False keeps ALL windows (not just last per ticker), giving many
+    # more evaluation samples. stop_randomization=True ensures deterministic order.
     validation = TimeSeriesDataSet.from_dataset(
         training, val_df[val_df["date"] < test_start],
-        predict=True, stop_randomization=True,
+        predict=False, stop_randomization=True,
     )
     test = TimeSeriesDataSet.from_dataset(
         training, test_df,
-        predict=True, stop_randomization=True,
+        predict=False, stop_randomization=True,
     )
 
     logger.info(

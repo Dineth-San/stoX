@@ -44,21 +44,23 @@ def compute_metrics(
     dict with keys: mae, rmse, mape, directional_accuracy, quantile_coverage
     """
     model.eval()
-    all_preds   = []   # P10, P50, P90 — shape (N, 3)
-    all_actuals = []   # actual log returns — shape (N,)
 
-    with torch.no_grad():
-        for batch in dataloader:
-            x, y = batch
-            preds = model(x)["prediction"]          # (batch, pred_len, n_quantiles)
-            preds = preds[:, 0, :]                  # squeeze pred_len=1 → (batch, 3)
-            target = y[0][:, 0]                     # (batch,)  — first (and only) step
+    # pytorch-forecasting 1.x predict() returns tensors directly
+    raw_preds, raw_actuals = model.predict(
+        dataloader, mode="quantiles", return_y=True
+    )
+    # raw_preds : (N, pred_len, n_quantiles) or (N, n_quantiles)
+    # raw_actuals : (N, pred_len) or (N,)
+    preds_t   = raw_preds.cpu()
+    actuals_t = raw_actuals.cpu()
 
-            all_preds.append(preds.cpu().numpy())
-            all_actuals.append(target.cpu().numpy())
+    if preds_t.ndim == 3:
+        preds_t = preds_t[:, 0, :]     # squeeze pred_len dim
+    if actuals_t.ndim == 2:
+        actuals_t = actuals_t[:, 0]
 
-    preds   = np.concatenate(all_preds,   axis=0)   # (N, 3)
-    actuals = np.concatenate(all_actuals, axis=0)   # (N,)
+    preds   = preds_t.numpy()           # (N, 3)
+    actuals = actuals_t.numpy()         # (N,)
 
     p10, p50, p90 = preds[:, 0], preds[:, 1], preds[:, 2]
 
