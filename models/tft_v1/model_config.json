@@ -1,0 +1,32 @@
+{
+  "model_version": "tft_v1",
+  "checkpoint": "D:\\stox\\ml\\models\\tft_v1\\best-v1.ckpt",
+  "encoder_length": 60,
+  "prediction_length": 1,
+  "hidden_size": 16,
+  "attention_head_size": 2,
+  "dropout": 0.1,
+  "hidden_continuous_size": 8,
+  "quantiles": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "learning_rate": 0.003,
+  "n_tickers": 20,
+  "val_metrics": {
+    "mae": 0.020441943779587746,
+    "rmse": 0.032652948051691055,
+    "mape": 0.9923551678657532,
+    "directional_accuracy": 0.4877555605481914,
+    "quantile_coverage": 0.7423050999775331
+  },
+  "test_metrics": {
+    "mae": 0.015548109076917171,
+    "rmse": 0.165601909160614,
+    "mape": 1.0047390460968018,
+    "directional_accuracy": 0.4236106169501174,
+    "quantile_coverage": 0.8309257809720344
+  },
+  "mlflow_run_id": "b1ab302a2b98457aa8886bbc3a2efa07"
+}

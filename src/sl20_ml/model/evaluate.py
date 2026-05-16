@@ -45,10 +45,11 @@ def compute_metrics(
     """
     model.eval()
 
-    # pytorch-forecasting 1.x predict() returns tensors directly
-    raw_preds, raw_actuals = model.predict(
-        dataloader, mode="quantiles", return_y=True
-    )
+    # pytorch-forecasting 1.x predict() returns a Prediction namedtuple with
+    # fields: output, x, index, decoder_lengths, y — access by attribute, not unpack.
+    result    = model.predict(dataloader, mode="quantiles", return_y=True)
+    raw_preds   = result.output    # (N, pred_len, n_quantiles)
+    raw_actuals = result.y[0]      # y is a tuple (target_tensor, weight); take [0]
     # raw_preds : (N, pred_len, n_quantiles) or (N, n_quantiles)
     # raw_actuals : (N, pred_len) or (N,)
     preds_t   = raw_preds.cpu()

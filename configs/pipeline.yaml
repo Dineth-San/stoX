@@ -153,17 +153,17 @@ dvc:
 model:
   encoder_length:            60    # Trading days of history fed to the model
   prediction_length:          1    # Predict 1 day ahead
-  hidden_size:               32    # Embedding / hidden dim (small for 20-stock dataset)
+  hidden_size:               16    # Reduced from 32 → faster on CPU
   attention_head_size:        2    # Number of multi-head attention heads
   dropout:                  0.1
-  hidden_continuous_size:    16    # Continuous variable projection size
+  hidden_continuous_size:     8    # Reduced from 16 → faster on CPU
   quantiles:               [0.1, 0.5, 0.9]   # P10, P50, P90
   learning_rate:           3.0e-3
-  max_epochs:               50
-  batch_size:               64
-  val_batch_size:          128
-  early_stopping_patience:  10    # Epochs without val_loss improvement before stop
+  max_epochs:               20    # Reduced from 50 → feasible on CPU (~20 min)
+  batch_size:              256    # Increased from 64 → 4x fewer steps/epoch
+  val_batch_size:          512    # Increased from 128 → faster val pass
+  early_stopping_patience:   5    # Reduced from 10 → stop sooner if not improving
   gradient_clip_val:        0.1
-  reduce_lr_patience:        5    # Epochs before LR is halved on plateau
+  reduce_lr_patience:        3    # Reduced from 5
   accelerator:             "auto" # auto → CUDA if available, else CPU
   checkpoint_dir:          "models/tft_v1"
