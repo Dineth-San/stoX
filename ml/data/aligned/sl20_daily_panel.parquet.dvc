@@ -1,0 +1,5 @@
+outs:
+- md5: 3abbee179b9ec5d72f97c82698f227a7
+  size: 8316113
+  hash: md5
+  path: sl20_daily_panel.parquet
