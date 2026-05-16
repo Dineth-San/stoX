@@ -84,6 +84,8 @@ def predict_all(
     -------
     DataFrame with columns: ticker, as_of_date, p10, p50, p90 (in LKR)
     """
+    from pytorch_forecasting import TimeSeriesDataSet
+
     ml_dir   = get_ml_dir()
     ckpt_dir = ml_dir / cfg["model"]["checkpoint_dir"]
     ckpt     = get_latest_checkpoint(ckpt_dir)
@@ -97,6 +99,15 @@ def predict_all(
     if as_of_date:
         df = df[df["date"] <= pd.Timestamp(as_of_date)]
 
+    # ── Build training dataset so its normalizer (GroupNormalizer) is used ──────
+    # IMPORTANT: The model was trained with a GroupNormalizer fit on the training
+    # split. Using a fresh normalizer fit on only ~61 rows gives wrong stats.
+    # We rebuild the training dataset from the full df and inherit its normalizer
+    # via TimeSeriesDataSet.from_dataset().
+    logger.info("Rebuilding training dataset to inherit training normalizer ...")
+    training, _, _ = build_tft_datasets(df, cfg)
+
+    # ── Filter to forecast tickers / date ────────────────────────────────────────
     if tickers:
         df = df[df["ticker"].isin(tickers)]
 
@@ -111,45 +122,22 @@ def predict_all(
         )
     df = df[df["ticker"].isin(valid_tickers)]
 
-    # Build dataset (train split not needed for inference — use all data)
-    # We create a minimal dataset covering just the last enc_len + 1 rows per ticker
+    # Use the last enc_len + 1 rows per ticker as the inference window.
+    # predict=True → one window per ticker (last window), stop_randomization for order.
     inference_df = (
         df.sort_values(["ticker", "date"])
           .groupby("ticker")
           .tail(enc_len + 1)
           .copy()
     )
-
-    # Re-number time_idx so it's contiguous for each ticker
+    # Re-number time_idx so it's contiguous within the inference slice
     inference_df["time_idx"] = inference_df.groupby("ticker").cumcount()
 
-    from pytorch_forecasting import TimeSeriesDataSet
-    from pytorch_forecasting.data import GroupNormalizer
-
-    known_reals   = [c for c in TIME_VARYING_KNOWN_REALS   if c in inference_df.columns]
-    unknown_reals = [c for c in TIME_VARYING_UNKNOWN_REALS if c in inference_df.columns]
-
-    # We only have the "past" rows — use all but last row as encoder, last as target
-    pred_dataset = TimeSeriesDataSet(
-        inference_df,
-        time_idx="time_idx",
-        target="log_target",
-        group_ids=STATIC_CATEGORICALS,
-        min_encoder_length=enc_len,
-        max_encoder_length=enc_len,
-        min_prediction_length=1,
-        max_prediction_length=1,
-        time_varying_known_reals=known_reals,
-        time_varying_unknown_reals=unknown_reals,
-        static_categoricals=STATIC_CATEGORICALS,
-        target_normalizer=GroupNormalizer(
-            groups=STATIC_CATEGORICALS,
-            transformation=None,
-        ),
-        add_relative_time_idx=True,
-        add_target_scales=True,
-        add_encoder_length=True,
-        allow_missing_timesteps=False,
+    # Inherit training normalizer via from_dataset() — this is the correct approach
+    pred_dataset = TimeSeriesDataSet.from_dataset(
+        training, inference_df,
+        predict=True,          # one window per ticker
+        stop_randomization=True,
     )
 
     pred_dl = pred_dataset.to_dataloader(
@@ -157,12 +145,14 @@ def predict_all(
     )
 
     # Run inference
+    # pf 1.x model.predict() returns a Prediction namedtuple.
+    # Access .output for the predicted tensor — never unpack or call .ndim directly.
     with torch.no_grad():
-        raw_preds = model.predict(pred_dl, mode="quantiles")
+        result = model.predict(pred_dl, mode="quantiles")
 
-    # raw_preds shape: (n_samples, pred_len, n_quantiles) or (n_samples, n_quantiles)
+    raw_preds = result.output if hasattr(result, "output") else result
     if raw_preds.ndim == 3:
-        raw_preds = raw_preds[:, 0, :]   # squeeze pred_len dim
+        raw_preds = raw_preds[:, 0, :]   # squeeze pred_len dim → (N, 3)
 
     preds_np = raw_preds.cpu().numpy()   # (n_tickers, 3)
 
