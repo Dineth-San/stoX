@@ -1,0 +1,5 @@
+outs:
+- md5: 53f36b6f78de8c5bb22347c88c6d7ef8
+  size: 191681
+  hash: md5
+  path: fred.parquet

@@ -56,3 +56,4 @@ Thumbs.db
 # ── DVC internals — pointer .dvc files and .gitignores ARE committed ──────────
 !ml/data/.gitignore
 !ml/data/**/.gitignore
+.claude/

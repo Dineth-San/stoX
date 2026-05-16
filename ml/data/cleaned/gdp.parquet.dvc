@@ -1,0 +1,5 @@
+outs:
+- md5: e26470db5f88a0def43d0c6bf9d70145
+  size: 4294
+  hash: md5
+  path: gdp.parquet

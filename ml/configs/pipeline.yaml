@@ -1,0 +1,169 @@
+# stoX — Data Pipeline Configuration
+# All scripts read from this file. Nothing domain-specific is hardcoded.
+
+# ── Target stocks ──────────────────────────────────────────────────────────────
+tickers:
+  sl20:
+    - JKH
+    - COMB
+    - DIAL
+    - SAMP
+    - HAYL
+    - CTC
+    - HNB
+    - LIOC
+    - SPEN
+    - DFCC
+    - NTB
+    - BUKI
+    - CARG
+    - CCS
+    - HHL
+    - LION
+    - MELS
+    - TKYO
+    - VONE
+    - AEL
+
+# ── Date ranges ────────────────────────────────────────────────────────────────
+dates:
+  historical_start: "2011-01-01"   # First date to include in training data
+  historical_end:   "2025-12-31"   # Last date currently available
+  # Train / validation / test splits (time-based, no shuffle)
+  train_end:      "2021-12-31"
+  val_start:      "2022-01-01"
+  val_end:        "2022-12-31"
+  test_start:     "2023-01-01"
+
+# ── File paths (relative to ml/) ───────────────────────────────────────────────
+paths:
+  raw:
+    cse:          data/raw/cse/stock_data
+    cbsl:         data/raw/cbsl
+    fred:         data/raw/fred
+    news_gdelt:   data/raw/news/gdelt
+    fundamentals: data/raw/fundamentals
+  cleaned:
+    prices:              data/cleaned/master_prices.parquet
+    market_context:      data/cleaned/market_context.parquet
+    market_context_full: data/cleaned/market_context_full.parquet
+    cbsl:                data/cleaned/cbsl.parquet        # exchange rates + policy rates (daily)
+    gdp:                 data/cleaned/gdp.parquet         # GDP, CPI, unemployment (annual)
+    fred:                data/cleaned/fred.parquet        # global macro: oil, S&P500, VIX, gold (daily)
+    news:                data/cleaned/news.parquet
+    fundamentals:        data/cleaned/fundamentals.parquet
+  aligned:
+    panel:        data/aligned/sl20_daily_panel.parquet
+  features:
+    panel:        data/features/sl20_feature_panel.parquet
+    stats:        data/features/feature_stats.parquet
+    dictionary:   data/features/data_dictionary.md
+    validation:   data/features/validation_report.md
+  models:         models/
+
+# ── FRED series to fetch ──────────────────────────────────────────────────────
+# Each entry: output_column: [fred_series_id, yfinance_fallback_ticker]
+# yfinance fallback used when FRED_API_KEY is not set
+fred_series:
+  oil_wti:      ["DCOILWTICO",         "CL=F"]
+  sp500:        ["SP500",              "^GSPC"]
+  vix:          ["VIXCLS",             "^VIX"]
+  us_10y_yield: ["DGS10",              "^TNX"]
+  dxy:          ["DTWEXBGS",           "DX-Y.NYB"]
+  gold:         ["GOLDAMGBD228NLBM",   "GC=F"]
+
+# ── World Bank WDI indicators to extract from GDP.csv ─────────────────────────
+wdi_indicators:
+  gdp_growth_pct:   "NY.GDP.MKTP.KD.ZG"   # GDP growth (annual %)
+  gdp_constant_usd: "NY.GDP.MKTP.KD"       # Real GDP (constant 2015 US$)
+  inflation_pct:    "FP.CPI.TOTL.ZG"       # CPI inflation (annual %)
+  unemployment_pct: "SL.UEM.TOTL.ZS"       # Unemployment rate (%)
+
+# ── CSE source files (within paths.raw.cse) ───────────────────────────────────
+cse_files:
+  daily_prices_2011_2020: "32Daily Shares Price List -2011-2020"
+  daily_prices_2021_2025: "33Daily Shares Price List -2021-2025"
+  market_indices_daily:   "07Market Indices - Daily.xls"
+  tri_daily:              "09Total Returns Indices - Daily.xls"
+  market_ratios_daily:    "10Market Ratios - Daily.xls"
+  market_stats_daily:     "11Market Statistics-Daily.xls"
+  dividends:              "01Dividends.xls"
+  scrip_dividends:        "02Scrip Dividends.xls"
+  bonus_issues:           "03Capitalization of Reserves (Bonus Issues).xls"
+  rights_issues:          "04Rights Issues.xls"
+  share_splits:           "05Sub Division (Share Splits).xls"
+  new_listings:           "06New Listings & De-listings.xls"
+  gics_daily:             "39GICS-Daily.xlsx"
+  beta_values:            "29 Beta Value.xls"
+  sector_ratios:          "25Sector Ratios.xls"
+  foreign_activity:       "20Foreign Activity - Monthly.xlsx"
+  foreign_holding:        "38Foreign Holding-Annual.xlsx"
+  quoted_securities:      "16 List of Quoted Securities And Issued Quantity.xls"
+  public_holding:         "17 Public Holding-Quarterly"
+
+# ── Cleaning thresholds ────────────────────────────────────────────────────────
+cleaning:
+  max_daily_return_flag: 0.50      # Flag daily returns above this (|return| > 50%)
+  min_close_price:       0.01      # Drop rows where close < this value
+  min_trading_days:      1500      # Minimum expected trading days per SL20 ticker
+
+# ── Feature engineering windows ───────────────────────────────────────────────
+features:
+  return_windows:    [5, 10, 20, 60]   # Rolling windows for returns / volatility
+  technical:
+    rsi_period:      14
+    macd_fast:       12
+    macd_slow:       26
+    macd_signal:     9
+    bollinger_period: 20
+    bollinger_std:   2.0
+    atr_period:      14
+    obv_ma_period:   20
+  sentiment:
+    local_weight:    0.60   # Weight for local news sources in sentiment aggregation
+    global_weight:   0.40
+  staleness:
+    macro_max_days:  35     # Flag if monthly macro forward-filled more than this
+    fundamental_max_days: 120  # Quarterly fundamentals
+
+# ── Feature toggles ────────────────────────────────────────────────────────────
+# Set to false to skip a feature group during engineering (useful for iteration)
+feature_toggles:
+  price_returns:     true
+  technical:         true
+  cross_sectional:   true
+  macro_cbsl:        true
+  macro_fred:        true
+  sentiment:         true
+  fundamentals:      false   # Off until source data is available
+  calendar:          true
+  static:            true
+
+# ── MLflow ─────────────────────────────────────────────────────────────────────
+mlflow:
+  tracking_uri:  "mlruns"          # Local file-based store (relative to ml/)
+  experiment:    "sl20-pipeline"
+  run_name:      "data-pipeline-v1"
+
+# ── DVC ────────────────────────────────────────────────────────────────────────
+dvc:
+  remote_name:   "local"           # Can be swapped to S3/GCS later
+
+# ── Model (TFT) ───────────────────────────────────────────────────────────────
+model:
+  encoder_length:            60    # Trading days of history fed to the model
+  prediction_length:          1    # Predict 1 day ahead
+  hidden_size:               16    # Reduced from 32 → faster on CPU
+  attention_head_size:        2    # Number of multi-head attention heads
+  dropout:                  0.1
+  hidden_continuous_size:     8    # Reduced from 16 → faster on CPU
+  quantiles:               [0.1, 0.5, 0.9]   # P10, P50, P90
+  learning_rate:           3.0e-3
+  max_epochs:               20    # Reduced from 50 → feasible on CPU (~20 min)
+  batch_size:              256    # Increased from 64 → 4x fewer steps/epoch
+  val_batch_size:          512    # Increased from 128 → faster val pass
+  early_stopping_patience:   5    # Reduced from 10 → stop sooner if not improving
+  gradient_clip_val:        0.1
+  reduce_lr_patience:        3    # Reduced from 5
+  accelerator:             "auto" # auto → CUDA if available, else CPU
+  checkpoint_dir:          "models/tft_v1"
