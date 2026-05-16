@@ -1,0 +1,5 @@
+outs:
+- md5: 448b6e6886777663e842120b05ca8404
+  size: 18959522
+  hash: md5
+  path: master_prices.parquet

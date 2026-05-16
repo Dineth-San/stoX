@@ -1,0 +1,30 @@
+
+# Data files — actual data tracked by DVC, not git
+# .dvc pointer files ARE committed to git
+data/raw/
+data/cleaned/*.parquet
+data/cleaned/*.csv
+data/aligned/*.parquet
+data/aligned/*.csv
+data/features/*.parquet
+data/features/*.csv
+mlruns/
+
+# Model checkpoint binaries tracked by DVC; model_config.json committed to git
+models/**/*.ckpt
+models/**/*.pt
+models/**/*.bin
+
+# Logs
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Lightning training logs
+lightning_logs/
+
+# Environment — never commit real credentials
+.env

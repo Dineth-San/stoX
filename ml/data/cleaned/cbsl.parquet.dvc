@@ -1,0 +1,5 @@
+outs:
+- md5: 9257449fdbb1fd169f94ffcb0ef629a5
+  size: 66966
+  hash: md5
+  path: cbsl.parquet
