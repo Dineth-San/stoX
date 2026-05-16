@@ -9,4 +9,22 @@ data/aligned/*.csv
 data/features/*.parquet
 data/features/*.csv
 mlruns/
-models/
+
+# Model checkpoint binaries tracked by DVC; model_config.json committed to git
+models/**/*.ckpt
+models/**/*.pt
+models/**/*.bin
+
+# Logs
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Lightning training logs
+lightning_logs/
+
+# Environment — never commit real credentials
+.env
