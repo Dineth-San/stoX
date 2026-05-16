@@ -44,6 +44,7 @@ ml/models/**/*.bin
 # ── Jupyter ───────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
+!ml/colab_train.ipynb
 
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
@@ -57,3 +58,6 @@ Thumbs.db
 !ml/data/.gitignore
 !ml/data/**/.gitignore
 .claude/
+
+# Personal learning guide — not shared with collaborators
+learning-guide/
