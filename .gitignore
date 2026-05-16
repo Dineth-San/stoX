@@ -1,0 +1,58 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Environment variables — never commit real secrets ─────────────────────────
+.env
+*.env.local
+
+# ── Node / frontend ───────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+
+# ── ML data — large files tracked by DVC, not git ─────────────────────────────
+ml/data/raw/
+ml/data/cleaned/*.parquet
+ml/data/cleaned/*.csv
+ml/data/aligned/*.parquet
+ml/data/aligned/*.csv
+ml/data/features/*.parquet
+ml/data/features/*.csv
+ml/mlruns/
+ml/lightning_logs/
+
+# ── ML model binaries — tracked by DVC; model_config.json IS committed ────────
+ml/models/**/*.ckpt
+ml/models/**/*.pt
+ml/models/**/*.bin
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── DVC internals — pointer .dvc files and .gitignores ARE committed ──────────
+!ml/data/.gitignore
+!ml/data/**/.gitignore
