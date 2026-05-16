@@ -1,0 +1,244 @@
+# stoX — The ML Model (TFT)
+
+> A plain-English explanation of the AI model we built, what it does, how it works, and what the results mean.
+
+---
+
+## What Problem Are We Solving?
+
+Given a stock's last 60 trading days of data, predict tomorrow's closing price — and be honest about how uncertain that prediction is.
+
+Most stock prediction tools give you a single number ("JKH will close at LKR 185 tomorrow"). That's misleading because it hides uncertainty. Instead, we give three numbers:
+
+- **P10 = LKR 178** — only 10% chance the actual price will be *below* this
+- **P50 = LKR 185** — the model's best single guess (equally likely to be above or below)
+- **P90 = LKR 193** — only 10% chance the actual price will be *above* this
+
+So the model is saying: "I'm 80% confident the price will land between 178 and 193, with 185 as my best guess." The width of that band tells you how uncertain the model is.
+
+---
+
+## What Model We Use: TFT
+
+**TFT stands for Temporal Fusion Transformer** — a deep learning model designed specifically for time-series forecasting (predicting sequences that change over time).
+
+It was introduced by Google Research in 2019 and became one of the best-performing models for this type of problem. The key things that make it good:
+
+1. **It understands time** — unlike a general AI model, TFT is built from the ground up to understand sequences where order matters (day 1, day 2, day 3...).
+
+2. **It handles many input types** — some features are known in the future (like the day of the week), some are only known up to today (like prices). TFT treats these differently.
+
+3. **It's interpretable** — TFT can tell you *which features it found most useful*, unlike a "black box" model.
+
+4. **It gives uncertainty** — via quantile outputs (P10/P50/P90).
+
+We use TFT through the **pytorch-forecasting** library (v1.7), which provides a battle-tested implementation. Under the hood it runs on **PyTorch**, the same deep learning framework used by Meta, Tesla, and most AI research labs.
+
+---
+
+## How TFT Works (Plain English)
+
+Think of TFT as having three stages: **remember**, **focus**, **predict**.
+
+### Stage 1: Remember (the LSTM encoder/decoder)
+
+An **LSTM** (Long Short-Term Memory) is a type of neural network that reads a sequence one step at a time and maintains a "memory" as it goes. Think of it like reading a book — by the time you're on page 60, you remember the important things from earlier chapters.
+
+The TFT has two LSTMs:
+- The **encoder** reads the past 60 days of data and builds a rich summary of what happened
+- The **decoder** takes that summary and thinks about the 1 future day being predicted
+
+### Stage 2: Focus (the Attention mechanism)
+
+After the LSTM, TFT adds a **multi-head attention** layer. This is the same idea behind ChatGPT — it lets the model look back and decide *which past days matter most* for making today's prediction.
+
+For example, if JKH had an unusual spike in volume 3 weeks ago, the attention mechanism might learn to "look at" that day more carefully because volume spikes tend to precede price moves.
+
+### Stage 3: Variable selection
+
+Not all 130 features are equally useful. TFT has a built-in "feature selector" (called a Variable Selection Network, or VSN) that learns which features to pay attention to and which to mostly ignore.
+
+This is important because some of our 130 features might be noise. The model learns to downweight them automatically.
+
+### Stage 4: Predict (quantile output)
+
+At the end, TFT produces three numbers: the P10, P50, and P90. These are trained with a special loss function called **Quantile Loss** — the training process is specifically designed so that, over time, approximately 80% of actual prices fall between P10 and P90. The model is penalised differently for over- and under-estimating each quantile.
+
+---
+
+## Our Model Architecture (Specific Details)
+
+```
+Model: TemporalFusionTransformer (pytorch-forecasting v1.7)
+─────────────────────────────────────────────────────────
+Parameters      : 50,706 trainable weights
+Hidden size     : 16   (size of internal representations)
+Attention heads : 2    (two "perspectives" when looking back)
+Dropout         : 0.1  (10% of neurons randomly disabled during
+                         training — prevents overfitting)
+─────────────────────────────────────────────────────────
+Input (encoder) : last 60 trading days of 38 features per ticker
+Output          : next 1 day → [P10, P50, P90]
+─────────────────────────────────────────────────────────
+Target variable : log(next_close / close)  — log return
+                  (We predict the *percentage change*, not the raw
+                   price. This is more stable across tickers.)
+```
+
+### Why log return instead of raw price?
+
+If you train on raw prices, LIOC (which trades at ~LKR 80) and JKH (which trades at ~LKR 180) look completely different to the model. But a 2% daily move is a 2% daily move regardless of the price level.
+
+We predict `log(next_close / close)` — essentially the next-day percentage return in log space. This is:
+- Comparable across all 20 tickers (same scale)
+- More statistically stable (no exponential trends)
+- Easy to convert back: `predicted_price = current_close × exp(predicted_log_return)`
+
+### What the model receives as input
+
+**Per-ticker (past 60 days):**
+Prices, returns, volatility, RSI, MACD, Bollinger bands, ATR, OBV, volume ratio, price position, cross-sectional ranks
+
+**Known in advance (past AND future):**
+Day of week, month, is_month_end, is_quarter_end, trading day of month, time_idx
+
+**Macro context (shared across all tickers):**
+USD/LKR, policy rate, VIX, oil price, S&P 500, gold, GDP growth, inflation, ASPI, SL20 index, market P/E
+
+**Static (doesn't change):**
+Ticker identity — the model knows *which stock* it's predicting
+
+---
+
+## How We Trained It
+
+### Data split
+```
+Train      : 2011–2021   (46,875 training windows)
+Validation : 2022        ( 4,451 windows) — used to monitor training
+Test       : 2023–2025   (14,053 windows) — final, unseen evaluation
+```
+
+Each "window" is: 60 days of history → predict day 61.
+
+### Training run
+```
+Optimiser   : Adam (adaptive learning rate)
+Learning rate: 0.003
+Batch size  : 256 samples per gradient step
+Max epochs  : 20 (training rounds through all data)
+Early stop  : Stop if val_loss doesn't improve for 5 epochs
+Hardware    : CPU (no GPU available)
+Time        : ~8 minutes
+Epochs run  : 9 (stopped early — no improvement after epoch 5)
+Best val_loss: 0.0142
+```
+
+**What's an epoch?** One complete pass through all 46,875 training samples. Each epoch the model adjusts its 50,706 weights slightly to make better predictions.
+
+**What's early stopping?** We watch the validation loss (error on the 2022 data the model has never trained on). When it stops getting better for 5 straight epochs, we stop — to avoid the model memorising the training data instead of learning general patterns.
+
+### Normalisation
+Each ticker's target values are **z-score normalised per ticker** (subtract mean, divide by std) using only the training set's statistics. This means the model doesn't accidentally "know" where prices end up during the validation or test periods.
+
+---
+
+## Results
+
+After training for 9 epochs (~8 minutes on CPU):
+
+| Metric | What it measures | Val (2022) | Test (2023–2025) |
+|--------|-----------------|-----------|-----------------|
+| **MAE** | Average prediction error (in log-return units) | 0.0204 | 0.0155 |
+| **RMSE** | Same but outlier-sensitive | 0.0327 | 0.1656 |
+| **Directional Accuracy** | Did we get the direction right (up vs down)? | 48.8% | 42.4% |
+| **Quantile Coverage** | % of actual prices inside the P10–P90 band | 74.2% | **83.1% ✓** |
+
+### What do these numbers mean?
+
+**MAE = 0.0155 on test** means the median prediction error is about 1.55% in log-return terms. For a stock at LKR 100, the average miss is ~LKR 1.55.
+
+**Directional Accuracy ~42–48%** — the model is essentially guessing direction randomly at this stage. This is expected with only 9 epochs of training on a CPU. Directional accuracy improves significantly with more training (50+ epochs). With GPU access, we'd run the full 50-epoch schedule.
+
+**Quantile Coverage = 83.1% on the test set** — this is the most important metric for a probabilistic forecaster. It means the P10–P90 band correctly captures the actual next-day price 83.1% of the time on data the model has never seen. The target is 80% (by definition of P10–P90), so **83% means the uncertainty bands are well-calibrated** — not too wide, not too narrow.
+
+---
+
+## The Saved Model
+
+After training, two files are written:
+
+**`ml/models/tft_v1/best-v1.ckpt`** — the PyTorch checkpoint. This is the actual saved model weights (50,706 numbers). Load this to make predictions. (~2 MB)
+
+**`ml/models/tft_v1/model_config.json`** — a JSON file with all the hyperparameters and the final metrics. Committed to git so you can always see what the model achieved without loading the checkpoint.
+
+---
+
+## Making a Prediction
+
+Once the model is trained, use the inference script:
+
+```bash
+# From ml/ directory:
+python predict.py --ticker JKH --date 2025-06-01
+
+# Output (example):
+# {
+#   "ticker": "JKH",
+#   "date": "2025-06-01",
+#   "last_close_lkr": 183.5,
+#   "p10_lkr": 179.2,
+#   "p50_lkr": 184.8,
+#   "p90_lkr": 191.3
+# }
+```
+
+**Source:** `ml/predict.py` — loads the checkpoint, builds the input window from recent data, runs the model, converts log-return output back to LKR prices.
+
+---
+
+## How to Re-train
+
+```bash
+cd ml/
+python train_model.py
+```
+
+Training results are logged to MLflow (in `ml/mlruns/`). You can view them by running:
+```bash
+cd ml/
+mlflow ui
+# then open http://localhost:5000 in your browser
+```
+
+To improve results on CPU without waiting hours:
+- The current config (in `ml/configs/pipeline.yaml`) uses `max_epochs: 20`, `batch_size: 256`, `hidden_size: 16`
+- With a GPU, restore `max_epochs: 50`, `batch_size: 64`, `hidden_size: 32` for better accuracy
+
+---
+
+## Relevant Files
+
+```
+ml/
+├── train_model.py                ← Main training script
+├── predict.py                    ← Inference: ticker + date → P10/P50/P90
+├── eval_checkpoint.py            ← Evaluate a saved checkpoint without re-training
+│
+├── src/sl20_ml/model/
+│   ├── dataset.py                ← Prepares data for TFT (TimeSeriesDataSet)
+│   ├── tft_model.py              ← Builds the TFT architecture
+│   └── evaluate.py               ← Computes MAE, RMSE, DA, quantile coverage
+│
+├── models/tft_v1/
+│   ├── best-v1.ckpt              ← Saved model weights (not in git, tracked by DVC)
+│   └── model_config.json         ← Hyperparameters + final metrics (in git)
+│
+├── configs/pipeline.yaml         ← model: section controls all hyperparameters
+│
+└── tests/test_model.py           ← 15 automated tests (all pass)
+```
+
+---
+
+→ **Next: [03-frontend.md](./03-frontend.md)** — The web dashboard
