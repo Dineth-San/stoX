@@ -86,15 +86,22 @@ def main(ckpt_path: Path):
         mlflow.log_artifact(str(ckpt_path))
 
         # ── Save model_config.json ────────────────────────────────────────────
+        # Read architecture from the actual checkpoint (not pipeline.yaml),
+        # since the checkpoint may have been trained with different settings.
+        actual_hidden_size            = best_model.hparams.get("hidden_size",            model_cfg["hidden_size"])
+        actual_attention_head_size    = best_model.hparams.get("attention_head_size",    model_cfg["attention_head_size"])
+        actual_hidden_continuous_size = best_model.hparams.get("hidden_continuous_size", model_cfg["hidden_continuous_size"])
+        actual_dropout                = best_model.hparams.get("dropout",                model_cfg["dropout"])
+
         config_out = {
             "model_version":          "tft_v1",
             "checkpoint":             str(ckpt_path),
             "encoder_length":         model_cfg["encoder_length"],
             "prediction_length":      model_cfg["prediction_length"],
-            "hidden_size":            model_cfg["hidden_size"],
-            "attention_head_size":    model_cfg["attention_head_size"],
-            "dropout":                model_cfg["dropout"],
-            "hidden_continuous_size": model_cfg["hidden_continuous_size"],
+            "hidden_size":            actual_hidden_size,
+            "attention_head_size":    actual_attention_head_size,
+            "dropout":                actual_dropout,
+            "hidden_continuous_size": actual_hidden_continuous_size,
             "quantiles":              model_cfg["quantiles"],
             "learning_rate":          model_cfg["learning_rate"],
             "n_tickers":              int(df["ticker"].nunique()),
@@ -120,7 +127,7 @@ def main(ckpt_path: Path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ckpt", default="models/tft_v1/best-v1.ckpt",
+    parser.add_argument("--ckpt", default="models/tft_v1/best.ckpt",
                         help="Path to checkpoint (relative to ml/)")
     args = parser.parse_args()
 

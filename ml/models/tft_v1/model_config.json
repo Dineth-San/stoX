@@ -1,12 +1,12 @@
 {
   "model_version": "tft_v1",
-  "checkpoint": "D:\\stox\\ml\\models\\tft_v1\\best-v1.ckpt",
+  "checkpoint": "D:\\stox\\ml\\models\\tft_v1\\best.ckpt",
   "encoder_length": 60,
   "prediction_length": 1,
-  "hidden_size": 16,
+  "hidden_size": 32,
   "attention_head_size": 2,
   "dropout": 0.1,
-  "hidden_continuous_size": 8,
+  "hidden_continuous_size": 16,
   "quantiles": [
     0.1,
     0.5,
@@ -14,19 +14,19 @@
   ],
   "learning_rate": 0.003,
   "n_tickers": 20,
+  "note": "Trained on Google Colab T4 GPU. pipeline.yaml now targets hidden_size=64 — re-train on Colab for a larger model.",
   "val_metrics": {
-    "mae": 0.020441943779587746,
-    "rmse": 0.032652948051691055,
-    "mape": 0.9923551678657532,
-    "directional_accuracy": 0.4877555605481914,
-    "quantile_coverage": 0.7423050999775331
+    "mae": 0.020442616194486618,
+    "rmse": 0.03260789066553116,
+    "mape": 1.0165818929672241,
+    "directional_accuracy": 0.4677600539204673,
+    "quantile_coverage": 0.7582565715569535
   },
   "test_metrics": {
-    "mae": 0.015548109076917171,
-    "rmse": 0.165601909160614,
-    "mape": 1.0047390460968018,
-    "directional_accuracy": 0.4236106169501174,
-    "quantile_coverage": 0.8309257809720344
-  },
-  "mlflow_run_id": "b1ab302a2b98457aa8886bbc3a2efa07"
+    "mae": 0.01562268752604723,
+    "rmse": 0.16560445725917816,
+    "mape": 1.038830041885376,
+    "directional_accuracy": 0.43236319647050453,
+    "quantile_coverage": 0.8084394791147798
+  }
 }

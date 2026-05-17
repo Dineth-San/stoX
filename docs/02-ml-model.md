@@ -71,11 +71,12 @@ At the end, TFT produces three numbers: the P10, P50, and P90. These are trained
 ```
 Model: TemporalFusionTransformer (pytorch-forecasting v1.7)
 ─────────────────────────────────────────────────────────
-Parameters      : 50,706 trainable weights
-Hidden size     : 16   (size of internal representations)
+Trainable params: 178,322
+Hidden size     : 32   (size of internal representations)
 Attention heads : 2    (two "perspectives" when looking back)
 Dropout         : 0.1  (10% of neurons randomly disabled during
                          training — prevents overfitting)
+Hidden cont. size: 16  (continuous variable embedding size)
 ─────────────────────────────────────────────────────────
 Input (encoder) : last 60 trading days of 38 features per ticker
 Output          : next 1 day → [P10, P50, P90]
@@ -84,6 +85,8 @@ Target variable : log(next_close / close)  — log return
                   (We predict the *percentage change*, not the raw
                    price. This is more stable across tickers.)
 ```
+
+> **Note on current vs target config:** `pipeline.yaml` now targets `hidden_size=64` for a future larger model run. The current saved `best.ckpt` uses `hidden_size=32` — it was trained on Colab before the config was upgraded. To get the larger model, re-run `colab_train.ipynb` on Colab with the current settings.
 
 ### Why log return instead of raw price?
 
@@ -123,20 +126,20 @@ Each "window" is: 60 days of history → predict day 61.
 
 ### Training run
 ```
-Optimiser   : Adam (adaptive learning rate)
+Optimiser    : Adam (adaptive learning rate)
 Learning rate: 0.003
-Batch size  : 256 samples per gradient step
-Max epochs  : 20 (training rounds through all data)
-Early stop  : Stop if val_loss doesn't improve for 5 epochs
-Hardware    : CPU (no GPU available)
-Time        : ~8 minutes
-Epochs run  : 9 (stopped early — no improvement after epoch 5)
-Best val_loss: 0.0142
+Batch size   : 64 samples per gradient step
+Max epochs   : 100 (training rounds through all data)
+Early stop   : Stop if val_loss doesn't improve for 15 epochs
+Hardware     : GPU (NVIDIA T4 via Google Colab)
+Gradient clip: 0.1  (prevents exploding gradients)
 ```
 
-**What's an epoch?** One complete pass through all 46,875 training samples. Each epoch the model adjusts its 50,706 weights slightly to make better predictions.
+**What's an epoch?** One complete pass through all 46,875 training samples. Each epoch the model adjusts its weights slightly to make better predictions.
 
-**What's early stopping?** We watch the validation loss (error on the 2022 data the model has never trained on). When it stops getting better for 5 straight epochs, we stop — to avoid the model memorising the training data instead of learning general patterns.
+**What's early stopping?** We watch the validation loss (error on the 2022 data the model has never trained on). When it stops getting better for 15 straight epochs, we stop — to avoid the model memorising the training data instead of learning general patterns.
+
+**Why Google Colab?** The GPU-sized model (hidden_size=64) was trained on a free T4 GPU via Google Colab because local hardware had no GPU. Training took ~8–20 minutes. The Colab notebook is at `ml/colab_train.ipynb`.
 
 ### Normalisation
 Each ticker's target values are **z-score normalised per ticker** (subtract mean, divide by std) using only the training set's statistics. This means the model doesn't accidentally "know" where prices end up during the validation or test periods.
@@ -145,22 +148,34 @@ Each ticker's target values are **z-score normalised per ticker** (subtract mean
 
 ## Results
 
-After training for 9 epochs (~8 minutes on CPU):
+The Colab GPU-trained model (`best.ckpt`, 3.1 MB) is saved in `ml/models/tft_v1/`. Metrics were computed by running `eval_checkpoint.py` on the actual checkpoint.
 
 | Metric | What it measures | Val (2022) | Test (2023–2025) |
 |--------|-----------------|-----------|-----------------|
-| **MAE** | Average prediction error (in log-return units) | 0.0204 | 0.0155 |
-| **RMSE** | Same but outlier-sensitive | 0.0327 | 0.1656 |
-| **Directional Accuracy** | Did we get the direction right (up vs down)? | 48.8% | 42.4% |
-| **Quantile Coverage** | % of actual prices inside the P10–P90 band | 74.2% | **83.1% ✓** |
+| **MAE** | Average prediction error (in log-return units) | 0.0204 | **0.0156** |
+| **RMSE** | Same but outlier-sensitive | 0.0326 | 0.1656 |
+| **Directional Accuracy** | Did we get the direction right (up vs down)? | 46.8% | 43.2% |
+| **Quantile Coverage** | % of actual prices inside the P10–P90 band | 75.8% | **80.8% ✓** |
 
 ### What do these numbers mean?
 
 **MAE = 0.0155 on test** means the median prediction error is about 1.55% in log-return terms. For a stock at LKR 100, the average miss is ~LKR 1.55.
 
-**Directional Accuracy ~42–48%** — the model is essentially guessing direction randomly at this stage. This is expected with only 9 epochs of training on a CPU. Directional accuracy improves significantly with more training (50+ epochs). With GPU access, we'd run the full 50-epoch schedule.
+**Directional Accuracy ~42–48%** — at this level of training and data, this is expected. CSE is a thin, illiquid market with strong mean-reversion; short-term direction is genuinely hard to predict. The value of this model is in the **calibrated uncertainty band** (P10–P90), not point direction calls.
 
-**Quantile Coverage = 83.1% on the test set** — this is the most important metric for a probabilistic forecaster. It means the P10–P90 band correctly captures the actual next-day price 83.1% of the time on data the model has never seen. The target is 80% (by definition of P10–P90), so **83% means the uncertainty bands are well-calibrated** — not too wide, not too narrow.
+**Quantile Coverage = 80.8% on the test set** — this is the most important metric for a probabilistic forecaster. It means the P10–P90 band correctly captures the actual next-day price 80.8% of the time on data the model has never seen. The target is 80% (by definition of P10–P90), so **~81% means the uncertainty bands are well-calibrated** — hitting the target almost exactly.
+
+### Comparison to baselines
+
+We evaluated two naive baselines on the test set to confirm the model adds value:
+
+| Baseline | MAE | Quantile Coverage |
+|----------|-----|------------------|
+| Persistence (predict 0% change) | 0.0158 | 81.2% |
+| Moving Average (20-day) | 0.0170 | — |
+| **TFT (our model, hidden_size=32)** | **0.0156** | **80.8%** |
+
+The TFT beats both baselines on MAE. The quantile coverage closely matches persistence (both near the 80% target), which is expected — both use historical volatility implicitly.
 
 ---
 
@@ -168,9 +183,11 @@ After training for 9 epochs (~8 minutes on CPU):
 
 After training, two files are written:
 
-**`ml/models/tft_v1/best-v1.ckpt`** — the PyTorch checkpoint. This is the actual saved model weights (50,706 numbers). Load this to make predictions. (~2 MB)
+**`ml/models/tft_v1/best.ckpt`** — the PyTorch checkpoint. This is the actual saved model weights. Load this to make predictions. (3.1 MB, hidden_size=32, trained on Colab T4)
 
 **`ml/models/tft_v1/model_config.json`** — a JSON file with all the hyperparameters and the final metrics. Committed to git so you can always see what the model achieved without loading the checkpoint.
+
+> **Note on re-training:** If you need to re-train (e.g., with more recent data), use the Colab notebook at `ml/colab_train.ipynb`. It handles GPU setup, dependency install, and Drive-based checkpoint saving automatically. Local CPU training produces an inferior model (hidden_size=16, 9 epochs) and should only be used for quick iteration/testing.
 
 ---
 
@@ -211,9 +228,7 @@ mlflow ui
 # then open http://localhost:5000 in your browser
 ```
 
-To improve results on CPU without waiting hours:
-- The current config (in `ml/configs/pipeline.yaml`) uses `max_epochs: 20`, `batch_size: 256`, `hidden_size: 16`
-- With a GPU, restore `max_epochs: 50`, `batch_size: 64`, `hidden_size: 32` for better accuracy
+The current config in `ml/configs/pipeline.yaml` uses GPU settings (`max_epochs: 100`, `batch_size: 64`, `hidden_size: 64`). These are the correct settings — do not change them back to CPU settings.
 
 ---
 

@@ -60,6 +60,10 @@ stoX/
 │           ├── app/      ← Pages (dashboard, predictions, portfolio, news)
 │           └── components/ ← Reusable UI components
 │
+├── backend/              ← The FastAPI backend (serves predictions to frontend)
+│   ├── CLAUDE.md         ← Build instructions for the backend session
+│   └── SPEC.md           ← Complete backend specification
+│
 └── docs/                 ← You are here — these documentation files
     ├── 00-project-overview.md    ← Start here
     ├── 01-ml-data-pipeline.md   ← How we get and prepare the data
@@ -73,13 +77,29 @@ stoX/
 
 | Area | Status | What it does |
 |------|--------|-------------|
-| Data ingestion | ✅ Done | Downloads/reads CSE price files, macro data |
+| Data ingestion | ✅ Done | Downloads/reads CSE price files, macro data (2011–2025) |
 | Data cleaning | ✅ Done | Fixes prices for stock splits, dividends, etc. |
 | Feature engineering | ✅ Done | Computes 130 ML-ready signals from raw data |
 | Feature validation | ✅ Done | Checks data quality automatically |
-| ML model (TFT) | ✅ Trained | Predicts next-day prices with P10/P50/P90 |
+| ML model (TFT) | ✅ Trained on GPU | Predicts next-day prices with P10/P50/P90 |
 | Web dashboard | 🔄 Scaffold | Pages built with mock data, needs real backend |
-| Backend API | ❌ Not started | Will serve predictions to the frontend |
+| Backend API | 🔄 Next | Will serve predictions to the frontend |
+
+---
+
+## What the Model Uses (and What it Doesn't)
+
+The TFT model predicts stock prices using:
+
+- **Price & technical signals** — RSI, MACD, Bollinger bands, ATR, OBV, rolling returns, volatility
+- **Macro / global market data** — USD/LKR rate, Sri Lanka policy rate, VIX (fear index), WTI oil price, S&P 500 level, gold price, GDP growth, inflation, ASPI index, SL20 index
+- **Calendar features** — day of week, month, is month-end, is quarter-end
+
+**What is NOT in the model:**
+- News or sentiment — no text data, no headlines, no sentiment scores
+- World events are captured **indirectly** only: e.g., if US-Iran tensions drove the VIX up and S&P 500 down, the model sees those market effects — but it does not read the news itself
+
+A separate sentiment model using local Almas Equities news data is planned for a future phase, once enough 2026 data accumulates.
 
 ---
 

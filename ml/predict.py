@@ -181,6 +181,32 @@ def predict_all(
     return pd.DataFrame(rows).sort_values("ticker").reset_index(drop=True)
 
 
+def run_inference(ticker: str | None = None, date: str | None = None) -> list[dict]:
+    """
+    Backend-facing API. Load the model, run inference, return results as a list of dicts.
+
+    Parameters
+    ----------
+    ticker : str or None
+        Single ticker (e.g. 'JKH'). None = all 20 SL20 tickers.
+    date : str or None
+        Forecast as-of date 'YYYY-MM-DD'. None = latest date in panel.
+
+    Returns
+    -------
+    List of dicts, one per ticker:
+        [{'ticker': 'JKH', 'as_of_date': '2025-06-01', 'last_close': 183.5,
+          'p10': 179.2, 'p50': 184.8, 'p90': 191.3, 'implied_ret': 0.0071}, ...]
+    """
+    cfg    = load_config()
+    ml_dir = get_ml_dir()
+    panel  = pd.read_parquet(ml_dir / cfg["paths"]["features"]["panel"])
+
+    tickers = [ticker.upper()] if ticker else None
+    results = predict_all(panel, cfg, tickers=tickers, as_of_date=date)
+    return results.to_dict(orient="records")
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
