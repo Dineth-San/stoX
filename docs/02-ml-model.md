@@ -71,14 +71,13 @@ At the end, TFT produces three numbers: the P10, P50, and P90. These are trained
 ```
 Model: TemporalFusionTransformer (pytorch-forecasting v1.7)
 ─────────────────────────────────────────────────────────
-Trainable params: 178,322
-Hidden size     : 32   (size of internal representations)
-Attention heads : 2    (two "perspectives" when looking back)
-Dropout         : 0.1  (10% of neurons randomly disabled during
+Hidden size     : 128  (size of internal representations)
+Attention heads : 8    (eight "perspectives" when looking back)
+Dropout         : 0.2  (20% of neurons randomly disabled during
                          training — prevents overfitting)
-Hidden cont. size: 16  (continuous variable embedding size)
+Hidden cont. size: 64  (continuous variable embedding size)
 ─────────────────────────────────────────────────────────
-Input (encoder) : last 60 trading days of 38 features per ticker
+Input (encoder) : last 90 trading days (≈4.5 months) of features
 Output          : next 1 day → [P10, P50, P90]
 ─────────────────────────────────────────────────────────
 Target variable : log(next_close / close)  — log return
@@ -86,7 +85,7 @@ Target variable : log(next_close / close)  — log return
                    price. This is more stable across tickers.)
 ```
 
-> **Note on current vs target config:** `pipeline.yaml` now targets `hidden_size=64` for a future larger model run. The current saved `best.ckpt` uses `hidden_size=32` — it was trained on Colab before the config was upgraded. To get the larger model, re-run `colab_train.ipynb` on Colab with the current settings.
+> **Training target:** Re-train on Colab T4 GPU using `ml/colab_train.ipynb`. With `hidden_size=128` and `batch_size=256` + FP16 mixed precision, the T4 should run at ~80% GPU utilisation.
 
 ### Why log return instead of raw price?
 
@@ -99,14 +98,19 @@ We predict `log(next_close / close)` — essentially the next-day percentage ret
 
 ### What the model receives as input
 
-**Per-ticker (past 60 days):**
+**Per-ticker (past 90 days):**
 Prices, returns, volatility, RSI, MACD, Bollinger bands, ATR, OBV, volume ratio, price position, cross-sectional ranks
+
+**Uncertainty / regime features (new in v2):**
+- `vol_regime` — ratio of 20-day vol to 252-day baseline; >1.0 means elevated volatility regime
+- `daily_range_pct` — intraday high-low spread as % of close; signals price discovery difficulty
+- `market_breadth` — fraction of SL20 stocks advancing that day (market-wide signal)
 
 **Known in advance (past AND future):**
 Day of week, month, is_month_end, is_quarter_end, trading day of month, time_idx
 
 **Macro context (shared across all tickers):**
-USD/LKR, policy rate, VIX, oil price, S&P 500, gold, GDP growth, inflation, ASPI, SL20 index, market P/E
+USD/LKR, 5-day FX change, policy rate, VIX, oil price, S&P 500, gold, GDP growth, inflation, ASPI, SL20 index, market P/E, foreign net flow (monthly CSE investor flow in Bn LKR)
 
 **Static (doesn't change):**
 Ticker identity — the model knows *which stock* it's predicting
@@ -117,9 +121,10 @@ Ticker identity — the model knows *which stock* it's predicting
 
 ### Data split
 ```
-Train      : 2011–2021   (46,875 training windows)
-Validation : 2022        ( 4,451 windows) — used to monitor training
-Test       : 2023–2025   (14,053 windows) — final, unseen evaluation
+Train      : 2011–2020   (training windows)
+[2022 excluded — Sri Lanka economic crisis, once-per-decade outlier]
+Validation : 2021        (windows) — used to monitor training
+Test       : 2023–2025   (windows) — final, unseen evaluation
 ```
 
 Each "window" is: 60 days of history → predict day 61.
@@ -128,10 +133,11 @@ Each "window" is: 60 days of history → predict day 61.
 ```
 Optimiser    : Adam (adaptive learning rate)
 Learning rate: 0.003
-Batch size   : 64 samples per gradient step
-Max epochs   : 100 (training rounds through all data)
-Early stop   : Stop if val_loss doesn't improve for 15 epochs
+Batch size   : 256 samples per gradient step  ← large batch for T4
+Max epochs   : 150 (training rounds through all data)
+Early stop   : Stop if val_loss doesn't improve for 25 epochs
 Hardware     : GPU (NVIDIA T4 via Google Colab)
+Precision    : FP16 mixed (tensor cores ≈2× faster, uses less VRAM)
 Gradient clip: 0.1  (prevents exploding gradients)
 ```
 

@@ -21,6 +21,37 @@ sys.path.insert(0, str(ML_DIR / "src"))
 
 from sl20_ml.utils.config import load_config
 
+
+def _load_checkpoint_cpu_safe(ckpt_path: str):
+    """
+    Load a TFT checkpoint with correct device handling.
+
+    Checkpoints trained on Colab CUDA store `_device='cuda:0'` inside each
+    torchmetrics Metric object.  When loading on a CPU-only machine, Lightning
+    calls model.to(device) which triggers torchmetrics' _apply(), which tries
+    to create a dummy tensor on 'cuda:0' and crashes.
+
+    Fix: patch Metric._apply to reset cached device to CPU when CUDA is absent.
+    """
+    from pytorch_forecasting import TemporalFusionTransformer as TFT
+    if not torch.cuda.is_available():
+        try:
+            from torchmetrics import Metric
+            _orig = Metric._apply
+            def _safe(self, fn):
+                if hasattr(self, "_device") and "cuda" in str(self._device):
+                    self._device = torch.device("cpu")
+                return _orig(self, fn)
+            Metric._apply = _safe
+            try:
+                return TFT.load_from_checkpoint(ckpt_path, map_location="cpu")
+            finally:
+                Metric._apply = _orig   # always restore
+        except ImportError:
+            return TFT.load_from_checkpoint(ckpt_path, map_location="cpu")
+    else:
+        return TFT.load_from_checkpoint(ckpt_path)
+
 cfg        = load_config()
 PANEL_PATH = ML_DIR / cfg["paths"]["features"]["panel"]
 
@@ -190,7 +221,7 @@ def test_quantiles_ordered():
     training, validation, _ = build_tft_datasets(df, cfg)
     _, val_dl, _ = make_dataloaders(training, validation, validation, cfg)
 
-    model = TemporalFusionTransformer.load_from_checkpoint(str(best))
+    model = _load_checkpoint_cpu_safe(str(best))
     model.eval()
 
     batch = next(iter(val_dl))
@@ -213,8 +244,7 @@ def test_checkpoint_loadable():
         pytest.skip("No checkpoint found — run train_model.py first")
 
     try:
-        from pytorch_forecasting import TemporalFusionTransformer
-        model = TemporalFusionTransformer.load_from_checkpoint(str(best))
+        model = _load_checkpoint_cpu_safe(str(best))
         assert model is not None
     except Exception as e:
         pytest.fail(f"Checkpoint failed to load: {e}")

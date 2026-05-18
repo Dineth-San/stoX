@@ -144,10 +144,16 @@ def main():
         # Note: mlflow.pytorch.autolog is incompatible with pf 1.x (class mismatch).
         # We log metrics manually after training instead.
 
+        # Use FP16 mixed precision on GPU (tensor cores → ~2× throughput, less VRAM).
+        # Falls back to full precision on CPU automatically.
+        precision = "16-mixed" if accelerator == "gpu" else "32-true"
+        logger.info(f"  Precision: {precision}")
+
         trainer = pl.Trainer(
             max_epochs=model_cfg["max_epochs"],
             accelerator=accelerator,
             devices=1,
+            precision=precision,
             gradient_clip_val=model_cfg["gradient_clip_val"],
             callbacks=callbacks,
             enable_progress_bar=True,

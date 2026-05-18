@@ -30,9 +30,11 @@ dates:
   historical_start: "2011-01-01"   # First date to include in training data
   historical_end:   "2025-12-31"   # Last date currently available
   # Train / validation / test splits (time-based, no shuffle)
-  train_end:      "2021-12-31"
-  val_start:      "2022-01-01"
-  val_end:        "2022-12-31"
+  # 2022 excluded entirely — SL economic crisis (once-per-decade outlier regime).
+  # Using 2021 as val keeps calibration signal without the crisis noise.
+  train_end:      "2020-12-31"
+  val_start:      "2021-01-01"
+  val_end:        "2021-12-31"
   test_start:     "2023-01-01"
 
 # ── File paths (relative to ml/) ───────────────────────────────────────────────
@@ -150,23 +152,25 @@ dvc:
   remote_name:   "local"           # Can be swapped to S3/GCS later
 
 # ── Model (TFT) ───────────────────────────────────────────────────────────────
-# GPU-optimised settings. Assumes CUDA GPU (Colab T4 or better).
-# For CPU-only machines reduce hidden_size→16, hidden_continuous_size→8,
-# max_epochs→20, batch_size→256, early_stopping_patience→5.
+# GPU-optimised settings for Colab T4 (15 GB VRAM).
+# FP16 mixed precision + batch_size=256 targets ~80% T4 utilisation.
+# For CPU-only machines: hidden_size→16, hidden_continuous_size→8,
+#   max_epochs→20, batch_size→32, early_stopping_patience→5, num_workers→0.
 model:
-  encoder_length:            60    # Trading days of history fed to the model
+  encoder_length:            90    # 90 days ≈ 4.5 months of history (was 60)
   prediction_length:          1    # Predict 1 day ahead
-  hidden_size:               64    # Larger model → better capacity (was 16 on CPU)
-  attention_head_size:        4    # More attention heads (was 2 on CPU)
-  dropout:                  0.1
-  hidden_continuous_size:    32    # Larger continuous embedding (was 8 on CPU)
+  hidden_size:               128   # Larger capacity — was 64 (T4 has headroom)
+  attention_head_size:        8    # More attention perspectives (was 4)
+  dropout:                  0.2   # Stronger regularisation for larger model
+  hidden_continuous_size:    64    # Continuous variable embedding (was 32)
   quantiles:               [0.1, 0.5, 0.9]   # P10, P50, P90
   learning_rate:           3.0e-3
-  max_epochs:              100    # Let early stopping decide; GPU makes this fast
-  batch_size:               64    # Standard batch size on GPU
-  val_batch_size:          128
-  early_stopping_patience:  15    # More patience → finds better optimum
+  max_epochs:              150    # More budget; early stopping decides
+  batch_size:              256    # Large batch → better T4 utilisation (was 64)
+  val_batch_size:          512
+  early_stopping_patience:  25    # More patience for deeper model
   gradient_clip_val:        0.1
-  reduce_lr_patience:        5
+  reduce_lr_patience:        8
   accelerator:             "auto" # auto → CUDA if available, else CPU
+  num_workers:               4    # DataLoader workers (Colab Linux); set 0 on Windows
   checkpoint_dir:          "models/tft_v1"

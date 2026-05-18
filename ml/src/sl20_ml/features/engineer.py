@@ -9,8 +9,13 @@ Feature groups
   Price / returns    : rolling cumulative returns & volatility (5, 10, 20, 60d)
   Technical          : RSI-14, MACD(12/26/9), Bollinger Bands(20, 2σ),
                        ATR-14, OBV + OBV-MA-20
+  Uncertainty        : vol_regime (current vol / long-run vol),
+                       daily_range_pct (intraday spread / close)
   Cross-sectional    : daily z-score and percentile rank across 20 tickers
                        for: daily_return, ret_5d, ret_20d, vol_20d, rsi_14, volume
+                       market_breadth (fraction of tickers advancing)
+  Macro derived      : usd_lkr_5d_change (5-day FX momentum),
+                       foreign_net_flow_30d (CSE monthly foreign net flow, Bn LKR)
   Calendar           : day_of_week, month, quarter, is_month_end, is_quarter_end,
                        trading_day_of_month
   Target             : target_next_close, target_next_return
@@ -162,6 +167,17 @@ def _engineer_one_ticker(grp: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         vol_ma20 = volume.rolling(20).mean().replace(0, np.nan)
         grp["volume_ratio_20d"] = volume / vol_ma20
 
+    # ── Uncertainty / regime features ────────────────────────────────────────
+    # vol_regime: ratio of short-term to long-run volatility.
+    # > 1.0 means the market is currently MORE volatile than its historical norm.
+    # This teaches the model when to widen its prediction bands.
+    vol_252 = grp["daily_return"].rolling(252, min_periods=60).std()
+    grp["vol_regime"] = grp["vol_20d"] / vol_252.replace(0, np.nan)
+
+    # daily_range_pct: intraday high-low spread as fraction of close.
+    # High values indicate uncertainty / price discovery difficulty.
+    grp["daily_range_pct"] = (high - low) / close.replace(0, np.nan)
+
     # ── Target variable ───────────────────────────────────────────────────────
     grp["target_next_close"]  = close.shift(-1)
     grp["target_next_return"] = grp["target_next_close"] / close - 1
@@ -207,7 +223,111 @@ def _add_cross_sectional(panel: pd.DataFrame, toggles: dict) -> pd.DataFrame:
             panel.groupby("date")[col].transform(lambda x: x.rank(pct=True))
         )
 
-    logger.info(f"  Cross-sectional features added: {len(cols)} base columns × 2 = {len(cols) * 2} new columns")
+    # market_breadth: fraction of SL20 tickers with positive return on each day.
+    # When most stocks fall simultaneously the model should widen its intervals.
+    if "daily_return" in panel.columns:
+        panel["market_breadth"] = panel.groupby("date")["daily_return"].transform(
+            lambda x: (x > 0).mean()
+        )
+
+    logger.info(f"  Cross-sectional features added: {len(cols)} base columns × 2 = {len(cols) * 2} new columns + market_breadth")
+    return panel
+
+
+# ── Derived macro features ────────────────────────────────────────────────────
+
+def _load_foreign_flow(cfg: dict) -> pd.DataFrame:
+    """
+    Parse CSE '20Foreign Activity - Monthly.xlsx' and return a daily DataFrame
+    with one column: foreign_net_flow_30d (Total Foreign net purchases, Bn LKR).
+
+    Layout of the file:
+      Row 0  : dates (monthly, starting 1992-01)
+      Row 15 : "Total Foreign" net purchases/(sales) in Rs.
+
+    The monthly value is forward-filled to daily and scaled to billions of LKR
+    for numeric stability.  The dataset normalisation step in dataset.py clips
+    extremes to ±10σ, so no further scaling is needed.
+    """
+    from pathlib import Path
+    try:
+        from sl20_ml.utils.config import get_ml_dir
+        ml_dir = get_ml_dir()
+    except Exception:
+        ml_dir = Path(__file__).parent.parent.parent.parent  # fallback: ml/
+
+    raw_dir  = ml_dir / cfg["paths"]["raw"]["cse"]
+    filename = cfg.get("cse_files", {}).get("foreign_activity", "20Foreign Activity - Monthly.xlsx")
+    path = raw_dir / filename
+
+    if not path.exists():
+        logger.warning(f"  Foreign activity file not found: {path} — skipping feature")
+        return pd.DataFrame(columns=["date", "foreign_net_flow_30d"])
+
+    try:
+        raw = pd.read_excel(path, sheet_name=0, header=None)
+        # Row 0 = header with dates in columns 1..end
+        dates = pd.to_datetime(raw.iloc[0, 1:], errors="coerce")
+        # Row 15 = "Total Foreign" net flow
+        values = pd.to_numeric(raw.iloc[15, 1:], errors="coerce")
+
+        flow = pd.DataFrame({
+            "date": dates.values,
+            "foreign_net_flow_30d": values.values / 1e9,  # scale to Bn LKR
+        })
+        flow = flow[flow["date"].notna()].sort_values("date").reset_index(drop=True)
+
+        # Expand monthly → daily by forward-filling onto a daily date range
+        if len(flow) == 0:
+            return pd.DataFrame(columns=["date", "foreign_net_flow_30d"])
+
+        daily_idx = pd.date_range(flow["date"].min(), flow["date"].max(), freq="D")
+        daily = pd.DataFrame({"date": daily_idx})
+        daily = daily.merge(flow, on="date", how="left")
+        daily["foreign_net_flow_30d"] = daily["foreign_net_flow_30d"].ffill()
+
+        logger.info(
+            f"  Foreign flow loaded: {len(flow)} monthly obs "
+            f"({flow['date'].min().date()} – {flow['date'].max().date()}), "
+            f"expanded to {len(daily):,} daily rows"
+        )
+        return daily[["date", "foreign_net_flow_30d"]]
+
+    except Exception as exc:
+        logger.warning(f"  Could not load foreign flow data: {exc} — skipping feature")
+        return pd.DataFrame(columns=["date", "foreign_net_flow_30d"])
+
+
+def _add_derived_macro(panel: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """
+    Add macro-derived features that are the same for all tickers on a given day:
+      - usd_lkr_5d_change : 5-day percentage change in USD/LKR rate
+      - foreign_net_flow_30d : CSE monthly net foreign flow (Bn LKR), daily fwd-fill
+    """
+    # usd_lkr_5d_change — 5-day FX momentum signal
+    if "usd_lkr" in panel.columns:
+        # Compute on unique dates (same for all tickers) then merge back
+        fx = (
+            panel[["date", "usd_lkr"]]
+            .drop_duplicates("date")
+            .sort_values("date")
+            .reset_index(drop=True)
+        )
+        fx["usd_lkr_5d_change"] = fx["usd_lkr"].pct_change(5)
+        panel = panel.merge(fx[["date", "usd_lkr_5d_change"]], on="date", how="left")
+        logger.info("  usd_lkr_5d_change added")
+
+    # foreign_net_flow_30d — monthly CSE foreign investor net flow
+    flow_df = _load_foreign_flow(cfg)
+    if len(flow_df) > 0:
+        flow_df["date"] = pd.to_datetime(flow_df["date"])
+        panel["date"] = pd.to_datetime(panel["date"])
+        panel = panel.merge(flow_df, on="date", how="left")
+        # Forward-fill any gaps at the tail (most recent months not yet in file)
+        panel["foreign_net_flow_30d"] = panel["foreign_net_flow_30d"].ffill()
+        null_pct = panel["foreign_net_flow_30d"].isna().mean()
+        logger.info(f"  foreign_net_flow_30d added (null rate: {null_pct:.1%})")
+
     return panel
 
 
@@ -299,15 +419,19 @@ def build_feature_panel(
     panel = panel.reset_index(drop=True)
 
     # ── Step 2: Cross-sectional features ─────────────────────────────────────
-    logger.info("  [2/4] Computing cross-sectional features ...")
+    logger.info("  [2/5] Computing cross-sectional features ...")
     panel = _add_cross_sectional(panel, toggles)
 
-    # ── Step 3: Calendar features ─────────────────────────────────────────────
-    logger.info("  [3/4] Adding calendar features ...")
+    # ── Step 3: Derived macro features ───────────────────────────────────────
+    logger.info("  [3/5] Adding derived macro features ...")
+    panel = _add_derived_macro(panel, cfg)
+
+    # ── Step 4: Calendar features ─────────────────────────────────────────────
+    logger.info("  [4/5] Adding calendar features ...")
     panel = _add_calendar(panel, toggles)
 
-    # ── Step 4: Staleness flags ───────────────────────────────────────────────
-    logger.info("  [4/4] Adding staleness flags ...")
+    # ── Step 5: Staleness flags ───────────────────────────────────────────────
+    logger.info("  [5/5] Adding staleness flags ...")
     panel = _add_staleness_flags(panel, cfg)
 
     # ── Re-sort and report ────────────────────────────────────────────────────

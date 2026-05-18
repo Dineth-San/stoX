@@ -30,12 +30,34 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
+import torch
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def _load_ckpt_cpu_safe(tft_cls, ckpt_path):
+    """Load checkpoint with torchmetrics device patch for CPU-only machines."""
+    if not torch.cuda.is_available():
+        try:
+            from torchmetrics import Metric
+            _orig = Metric._apply
+            def _safe(self, fn):
+                if hasattr(self, "_device") and "cuda" in str(self._device):
+                    self._device = torch.device("cpu")
+                return _orig(self, fn)
+            Metric._apply = _safe
+            try:
+                return tft_cls.load_from_checkpoint(str(ckpt_path), map_location="cpu")
+            finally:
+                Metric._apply = _orig
+        except ImportError:
+            return tft_cls.load_from_checkpoint(str(ckpt_path), map_location="cpu")
+    return tft_cls.load_from_checkpoint(str(ckpt_path))
 
 
 def main(ckpt_path: Path):
@@ -59,7 +81,7 @@ def main(ckpt_path: Path):
     _, val_dl, test_dl = make_dataloaders(training, validation, test, cfg)
 
     # ── Load checkpoint ───────────────────────────────────────────────────────
-    best_model = TFT.load_from_checkpoint(str(ckpt_path))
+    best_model = _load_ckpt_cpu_safe(TFT, ckpt_path)
     logger.info("Checkpoint loaded.")
 
     # ── Evaluate ──────────────────────────────────────────────────────────────

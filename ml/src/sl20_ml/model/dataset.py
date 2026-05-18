@@ -55,12 +55,20 @@ TIME_VARYING_UNKNOWN_REALS = [
     "price_to_52w_high",
     # Cross-sectional
     "xs_zscore_daily_return", "xs_rank_ret_20d", "xs_zscore_rsi_14",
+    # Market breadth (fraction of SL20 tickers advancing on the day)
+    "market_breadth",
     # Macro — CBSL
     "usd_lkr", "policy_rate_mid",
     # Macro — FRED
     "vix", "oil_wti", "sp500", "gold", "gdp_growth_pct", "inflation_pct",
     # Market
     "aspi", "sl20_index", "market_per",
+    # Uncertainty / regime features
+    "vol_regime",           # short-term vol / long-run vol — regime detector
+    "daily_range_pct",      # intraday high-low / close — price discovery difficulty
+    # Derived macro
+    "usd_lkr_5d_change",    # 5-day FX momentum
+    "foreign_net_flow_30d", # CSE monthly net foreign investor flow (Bn LKR)
 ]
 
 STATIC_CATEGORICALS = ["ticker"]
@@ -231,15 +239,23 @@ def make_dataloaders(
     test: TimeSeriesDataSet,
     cfg: dict,
 ) -> tuple:
-    """Return (train_dl, val_dl, test_dl)."""
+    """Return (train_dl, val_dl, test_dl).
+
+    num_workers is read from pipeline.yaml model.num_workers.
+    Set to 4 for Colab/Linux (speeds up data loading to feed GPU).
+    Set to 0 for Windows local runs (avoids multiprocessing spawn issues).
+    """
     m = cfg["model"]
+    nw = m.get("num_workers", 0)
+    pw = nw > 0   # persistent_workers only valid when num_workers > 0
+
     train_dl = training.to_dataloader(
-        train=True, batch_size=m["batch_size"], num_workers=0, persistent_workers=False
+        train=True, batch_size=m["batch_size"], num_workers=nw, persistent_workers=pw
     )
     val_dl = validation.to_dataloader(
-        train=False, batch_size=m["val_batch_size"], num_workers=0, persistent_workers=False
+        train=False, batch_size=m["val_batch_size"], num_workers=nw, persistent_workers=pw
     )
     test_dl = test.to_dataloader(
-        train=False, batch_size=m["val_batch_size"], num_workers=0, persistent_workers=False
+        train=False, batch_size=m["val_batch_size"], num_workers=nw, persistent_workers=pw
     )
     return train_dl, val_dl, test_dl

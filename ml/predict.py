@@ -43,9 +43,34 @@ logger = logging.getLogger(__name__)
 
 
 def load_model(ckpt_path: Path):
-    """Load the best TFT checkpoint."""
+    """Load the best TFT checkpoint with proper device handling.
+
+    Checkpoints trained on Colab CUDA store device='cuda:0' in torchmetrics
+    Metric objects. On CPU-only machines this causes an AssertionError unless
+    the cached device is patched before the .to() call.
+    """
     from pytorch_forecasting import TemporalFusionTransformer
-    model = TemporalFusionTransformer.load_from_checkpoint(str(ckpt_path))
+    if not torch.cuda.is_available():
+        try:
+            from torchmetrics import Metric
+            _orig = Metric._apply
+            def _safe(self, fn):
+                if hasattr(self, "_device") and "cuda" in str(self._device):
+                    self._device = torch.device("cpu")
+                return _orig(self, fn)
+            Metric._apply = _safe
+            try:
+                model = TemporalFusionTransformer.load_from_checkpoint(
+                    str(ckpt_path), map_location="cpu"
+                )
+            finally:
+                Metric._apply = _orig
+        except ImportError:
+            model = TemporalFusionTransformer.load_from_checkpoint(
+                str(ckpt_path), map_location="cpu"
+            )
+    else:
+        model = TemporalFusionTransformer.load_from_checkpoint(str(ckpt_path))
     model.eval()
     return model
 
