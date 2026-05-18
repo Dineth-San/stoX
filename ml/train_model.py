@@ -144,9 +144,13 @@ def main():
         # Note: mlflow.pytorch.autolog is incompatible with pf 1.x (class mismatch).
         # We log metrics manually after training instead.
 
-        # Use FP16 mixed precision on GPU (tensor cores → ~2× throughput, less VRAM).
-        # Falls back to full precision on CPU automatically.
-        precision = "16-mixed" if accelerator == "gpu" else "32-true"
+        # FP32 only — pytorch-forecasting's InterpretableMultiHeadAttention uses
+        # Python float constants (float("-inf") or -1e9) as mask_bias inside
+        # masked_fill(). These are version-dependent and ALL overflow float16's
+        # max (~65504), causing: RuntimeError: value cannot be converted to
+        # type c10::Half without overflow.
+        # GPU utilisation still benefits significantly from batch_size=256.
+        precision = "32-true"
         logger.info(f"  Precision: {precision}")
 
         trainer = pl.Trainer(
