@@ -172,5 +172,5 @@ model:
   gradient_clip_val:        0.1
   reduce_lr_patience:        8
   accelerator:             "auto" # auto → CUDA if available, else CPU
-  num_workers:               4    # DataLoader workers (Colab Linux); set 0 on Windows
+  num_workers:               2    # DataLoader workers; Colab suggests max=2 for T4
   checkpoint_dir:          "models/tft_v1"
