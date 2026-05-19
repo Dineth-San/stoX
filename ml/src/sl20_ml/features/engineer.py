@@ -173,10 +173,17 @@ def _engineer_one_ticker(grp: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     # This teaches the model when to widen its prediction bands.
     vol_252 = grp["daily_return"].rolling(252, min_periods=60).std()
     grp["vol_regime"] = grp["vol_20d"] / vol_252.replace(0, np.nan)
+    # Fill early NaNs (first ~252 rows per ticker before vol_252 is valid) with
+    # 1.0 = "neutral/normal regime". pytorch-forecasting would otherwise impute
+    # NaN as 0, which signals "near-zero volatility" and corrupts early training.
+    grp["vol_regime"] = grp["vol_regime"].fillna(1.0)
 
     # daily_range_pct: intraday high-low spread as fraction of close.
     # High values indicate uncertainty / price discovery difficulty.
     grp["daily_range_pct"] = (high - low) / close.replace(0, np.nan)
+    # Forward-fill any NaNs (rare: missing OHLC days), then fill remaining with
+    # a sensible default (0.01 = 1% intraday range, typical for CSE).
+    grp["daily_range_pct"] = grp["daily_range_pct"].ffill().fillna(0.01)
 
     # ── Target variable ───────────────────────────────────────────────────────
     grp["target_next_close"]  = close.shift(-1)
