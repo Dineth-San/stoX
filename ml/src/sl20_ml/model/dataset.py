@@ -106,6 +106,18 @@ def prepare_tft_dataframe(panel: pd.DataFrame) -> pd.DataFrame:
 
     # ── 3. Log-return target ──────────────────────────────────────────────────
     df["log_target"] = np.log(df["target_next_close"] / df["close"])
+    # Clip to ±0.25 (±25% single-day move cap).
+    # Eliminates corrupted targets from unadjusted corporate actions (rights
+    # issues, special dividends) that would create log-returns of ±50–200%
+    # and corrupt gradient signal.  Legitimate CSE daily moves rarely exceed
+    # ±15%; ±25% is a generous cap that only removes clear data artefacts.
+    raw_outliers = (df["log_target"].abs() > 0.25).sum()
+    df["log_target"] = df["log_target"].clip(-0.25, 0.25)
+    if raw_outliers > 0:
+        logger.info(
+            f"  Clipped {raw_outliers} log_target values outside ±0.25 "
+            f"(likely unadjusted corporate actions)"
+        )
 
     # ── 4. Log-normalised close (detrended price level) ───────────────────────
     df["log_close"] = np.log(df["close"])
@@ -172,18 +184,24 @@ def build_tft_datasets(
     dates     = cfg["dates"]
 
     val_start  = pd.Timestamp(dates["val_start"])
+    # val_end is CRITICAL: it must exclude 2022 (SL economic crisis).
+    # The model was trained on 2011-2020; including 2022 in the val set gives
+    # a val loss the model can never improve on (out-of-distribution crisis),
+    # causing early stopping to fire at epoch ~2 every single run.
+    val_end    = pd.Timestamp(dates["val_end"])
     test_start = pd.Timestamp(dates["test_start"])
 
     enc_len  = model_cfg["encoder_length"]
     pred_len = model_cfg["prediction_length"]
 
     train_df = df[df["date"] < val_start].copy()
-    val_df   = df[df["date"] >= val_start].copy()   # includes test; from_dataset handles cutoff
+    val_df   = df[(df["date"] >= val_start) & (df["date"] <= val_end)].copy()
     test_df  = df[df["date"] >= test_start].copy()
 
     logger.info(
         f"  Split sizes: train={len(train_df):,}  "
-        f"val_pool={len(val_df):,}  test_pool={len(test_df):,}"
+        f"val={len(val_df):,} ({dates['val_start']}→{dates['val_end']})  "
+        f"test={len(test_df):,}"
     )
 
     # Only include features that are actually present in df
@@ -215,8 +233,9 @@ def build_tft_datasets(
 
     # predict=False keeps ALL windows (not just last per ticker), giving many
     # more evaluation samples. stop_randomization=True ensures deterministic order.
+    # val_df is already restricted to [val_start, val_end] = 2021 only.
     validation = TimeSeriesDataSet.from_dataset(
-        training, val_df[val_df["date"] < test_start],
+        training, val_df,
         predict=False, stop_randomization=True,
     )
     test = TimeSeriesDataSet.from_dataset(

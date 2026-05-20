@@ -91,12 +91,17 @@ Hidden cont. size: 64  (continuous variable embedding size)
 Input (encoder) : last 90 trading days (≈4.5 months) of features
 Output          : next 1 day → [P10, P50, P90]
 ─────────────────────────────────────────────────────────
-Target variable : log(next_close / close)  — log return
+Target variable : log(next_close / close)  — log return, clipped ±0.25
                   (We predict the *percentage change*, not the raw
-                   price. This is more stable across tickers.)
+                   price. Clipping removes corrupted targets from
+                   unadjusted corporate actions.)
+─────────────────────────────────────────────────────────
+Training config : lr=5e-4  gradient_clip=0.5  batch=128
+                  early_stop_patience=30  reduce_lr_patience=10
+                  val = 2021 only (2022 crisis excluded from val)
 ```
 
-> **Training target:** Re-train on Colab T4 GPU using `ml/colab_train.ipynb`. With `hidden_size=128` and `batch_size=256` + FP16 mixed precision, the T4 should run at ~80% GPU utilisation.
+> **Training target:** Re-train on Colab T4 GPU using `ml/colab_train.ipynb`. With `hidden_size=128` and `batch_size=128` FP32, the T4 runs at ~80% GPU utilisation. Expected training time: 60–90 min.
 
 ### Why log return instead of raw price?
 

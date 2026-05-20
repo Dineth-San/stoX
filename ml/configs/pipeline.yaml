@@ -153,27 +153,37 @@ dvc:
 
 # ── Model (TFT) ───────────────────────────────────────────────────────────────
 # GPU-optimised settings for Colab T4 (15 GB VRAM).
-# FP16 mixed precision + batch_size=256 targets ~80% T4 utilisation.
+# batch_size=128 targets ~80% T4 utilisation with FP32 precision.
 # For CPU-only machines: hidden_size→16, hidden_continuous_size→8,
 #   max_epochs→20, batch_size→32, early_stopping_patience→5, num_workers→0.
+#
+# v3 changes (epoch-27 fix):
+#   1. val_end is now respected in dataset.py → val = 2021 only (not 2021+2022)
+#      CRITICAL: 2022 (SL crisis) in val caused early stopping to fire at
+#      epoch ~2 every run because crisis patterns are unlearnable.
+#   2. gradient_clip_val 0.1→0.5 — 0.1 was too tight for 2.5M params; model
+#      barely moved after epoch 1 (effective per-param step ≈ 6e-8).
+#   3. learning_rate 1e-3→5e-4 — more conservative with correct gradient flow.
+#   4. reduce_lr_patience 5→10 — prevents LR from collapsing to 6e-5 within the
+#      25-epoch patience window (LR was halved 4× before early stop fired).
+#   5. batch_size 256→128 — beneficial gradient noise helps escape local minima.
+#   6. log_target clipped to ±0.25 in dataset.py — removes corrupted targets
+#      from unadjusted corporate actions that caused RMSE=0.166 vs MAE=0.015.
 model:
   encoder_length:            90    # 90 days ≈ 4.5 months of history (was 60)
   prediction_length:          1    # Predict 1 day ahead
   hidden_size:               128   # Larger capacity — was 64 (T4 has headroom)
   attention_head_size:        8    # More attention perspectives (was 4)
-  dropout:                  0.2   # Stronger regularisation for larger model
+  dropout:                  0.2   # Regularisation for larger model
   hidden_continuous_size:    64    # Continuous variable embedding (was 32)
   quantiles:               [0.1, 0.5, 0.9]   # P10, P50, P90
-  # LR tuned for hidden_size=128 (2.5M params). 3e-3 overshot the minimum at
-  # epoch 2 and early-stopping fired at epoch 27 — model barely trained.
-  # 1e-3 lets the model train for 60-100 epochs before plateauing.
-  learning_rate:           1.0e-3
+  learning_rate:           5.0e-4  # was 1e-3; reduced now gradient clip is correct
   max_epochs:              150    # More budget; early stopping decides
-  batch_size:              256    # Large batch → better T4 utilisation (was 64)
-  val_batch_size:          512
-  early_stopping_patience:  25    # More patience for deeper model
-  gradient_clip_val:        0.1
-  reduce_lr_patience:        5    # Reduce LR faster once plateau is detected
+  batch_size:              128    # was 256; lower noise → better exploration
+  val_batch_size:          256
+  early_stopping_patience:  30    # 30 epochs patience (was 25)
+  gradient_clip_val:        0.5   # was 0.1 — far too tight for 2.5M params
+  reduce_lr_patience:       10    # was 5 — don't halve LR within patience window
   accelerator:             "auto" # auto → CUDA if available, else CPU
   num_workers:               2    # DataLoader workers; Colab suggests max=2 for T4
   checkpoint_dir:          "models/tft_v1"
