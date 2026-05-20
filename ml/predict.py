@@ -13,7 +13,10 @@ Usage
     python predict.py --format json
 
 The script produces P10, P50, P90 quantile forecasts in price terms (LKR).
-P50 is the point forecast. The [P10, P90] interval is the 80% confidence band.
+P50 is the point forecast. The [P10, P90] interval is the conformally
+calibrated prediction band (target coverage stored in model_config.json,
+default 90%). Calibration is applied via the `conformal_delta` scalar
+computed at train time on the validation set.
 """
 
 import argparse
@@ -89,6 +92,26 @@ def get_latest_checkpoint(ckpt_dir: Path) -> Path:
     return ckpts[-1]
 
 
+def _load_conformal_delta(ckpt_dir: Path) -> float:
+    """
+    Load the conformal calibration delta from model_config.json next to the
+    checkpoint. Returns 0.0 if no config or delta found (no calibration).
+    """
+    config_path = ckpt_dir / "model_config.json"
+    if not config_path.exists():
+        logger.warning(f"  model_config.json not found — running uncalibrated")
+        return 0.0
+    try:
+        config = json.loads(config_path.read_text())
+        delta  = float(config.get("conformal_delta", 0.0))
+        target = config.get("target_coverage", "raw")
+        logger.info(f"  Conformal delta = {delta:+.6f} (target {target})")
+        return delta
+    except Exception as exc:
+        logger.warning(f"  Could not read conformal_delta: {exc} — running uncalibrated")
+        return 0.0
+
+
 def predict_all(
     panel: pd.DataFrame,
     cfg: dict,
@@ -97,6 +120,11 @@ def predict_all(
 ) -> pd.DataFrame:
     """
     Produce next-day P10/P50/P90 forecasts for one or all tickers.
+
+    The returned P10/P90 are the **calibrated** bounds — i.e. the model's
+    raw quantile predictions adjusted by the conformal delta stored in
+    model_config.json. By construction these target the documented
+    coverage level (typically 90%) on the validation set.
 
     Parameters
     ----------
@@ -110,6 +138,7 @@ def predict_all(
     DataFrame with columns: ticker, as_of_date, p10, p50, p90 (in LKR)
     """
     from pytorch_forecasting import TimeSeriesDataSet
+    from sl20_ml.model.conformal import apply_conformal
 
     ml_dir   = get_ml_dir()
     ckpt_dir = ml_dir / cfg["model"]["checkpoint_dir"]
@@ -117,6 +146,7 @@ def predict_all(
 
     logger.info(f"Loading model from {ckpt} ...")
     model = load_model(ckpt)
+    conformal_delta = _load_conformal_delta(ckpt_dir)
 
     # Prepare dataframe (same transforms as training)
     df = prepare_tft_dataframe(panel)
@@ -179,7 +209,14 @@ def predict_all(
     if raw_preds.ndim == 3:
         raw_preds = raw_preds[:, 0, :]   # squeeze pred_len dim → (N, 3)
 
-    preds_np = raw_preds.cpu().numpy()   # (n_tickers, 3)
+    preds_np = raw_preds.cpu().numpy()   # (n_tickers, 3) in log-return space
+
+    # ── Apply conformal calibration (in log-return space, before LKR conv) ──
+    # Without this, the [P10, P90] interval is an uncalibrated 80% band.
+    # With it, it's a calibrated `target_coverage` band (typically 90%).
+    p10_cal, p50_cal, p90_cal = apply_conformal(
+        preds_np[:, 0], preds_np[:, 1], preds_np[:, 2], conformal_delta,
+    )
 
     # Get last-known close per ticker for price reconstruction
     last_close = (
@@ -190,9 +227,9 @@ def predict_all(
     rows = []
     for i, ticker in enumerate(valid_tickers):
         lc = last_close.get(ticker, np.nan)
-        p10 = float(lc * np.exp(preds_np[i, 0]))
-        p50 = float(lc * np.exp(preds_np[i, 1]))
-        p90 = float(lc * np.exp(preds_np[i, 2]))
+        p10 = float(lc * np.exp(p10_cal[i]))
+        p50 = float(lc * np.exp(p50_cal[i]))
+        p90 = float(lc * np.exp(p90_cal[i]))
         rows.append({
             "ticker":      ticker,
             "as_of_date":  str(as_of.date()),

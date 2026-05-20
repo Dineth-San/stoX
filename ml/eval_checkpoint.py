@@ -22,9 +22,12 @@ import mlflow
 import numpy as np
 from pytorch_forecasting import TemporalFusionTransformer as TFT
 
+from sl20_ml.model.conformal import compute_conformal_delta
 from sl20_ml.model.dataset import build_tft_datasets, make_dataloaders, prepare_tft_dataframe
-from sl20_ml.model.evaluate import compute_metrics
+from sl20_ml.model.evaluate import compute_metrics, extract_predictions
 from sl20_ml.utils.config import get_ml_dir, load_config
+
+TARGET_COVERAGE = 0.90
 
 import pandas as pd
 
@@ -84,12 +87,20 @@ def main(ckpt_path: Path):
     best_model = _load_ckpt_cpu_safe(TFT, ckpt_path)
     logger.info("Checkpoint loaded.")
 
-    # ── Evaluate ──────────────────────────────────────────────────────────────
-    logger.info("Evaluating on val set ...")
-    val_metrics  = compute_metrics(best_model, val_dl,  split_name="val")
+    # ── Compute conformal calibration on val ──────────────────────────────────
+    logger.info(f"Computing conformal calibration on val (target {TARGET_COVERAGE:.0%}) ...")
+    val_p10, _val_p50, val_p90, val_actuals = extract_predictions(best_model, val_dl)
+    conformal_delta = compute_conformal_delta(
+        val_p10, val_p90, val_actuals, target_coverage=TARGET_COVERAGE,
+    )
+    logger.info(f"  conformal_delta = {conformal_delta:+.6f}")
 
-    logger.info("Evaluating on test set ...")
-    test_metrics = compute_metrics(best_model, test_dl, split_name="test")
+    # ── Evaluate (both raw and calibrated) ────────────────────────────────────
+    logger.info("Evaluating ...")
+    val_metrics_raw  = compute_metrics(best_model, val_dl,  split_name="val",  conformal_delta=0.0)
+    val_metrics      = compute_metrics(best_model, val_dl,  split_name="val",  conformal_delta=conformal_delta)
+    test_metrics_raw = compute_metrics(best_model, test_dl, split_name="test", conformal_delta=0.0)
+    test_metrics     = compute_metrics(best_model, test_dl, split_name="test", conformal_delta=conformal_delta)
 
     # ── Log to MLflow ─────────────────────────────────────────────────────────
     mlflow.set_tracking_uri((ml_dir / cfg["mlflow"]["tracking_uri"]).as_uri())
@@ -105,6 +116,12 @@ def main(ckpt_path: Path):
             for k, v in metrics.items():
                 if not np.isnan(v):
                     mlflow.log_metric(f"{split}_{k}", v)
+        for split, metrics in [("val", val_metrics_raw), ("test", test_metrics_raw)]:
+            for k, v in metrics.items():
+                if not np.isnan(v):
+                    mlflow.log_metric(f"{split}_raw_{k}", v)
+        mlflow.log_metric("conformal_delta", conformal_delta)
+        mlflow.log_metric("target_coverage", TARGET_COVERAGE)
         mlflow.log_artifact(str(ckpt_path))
 
         # ── Save model_config.json ────────────────────────────────────────────
@@ -127,8 +144,12 @@ def main(ckpt_path: Path):
             "quantiles":              model_cfg["quantiles"],
             "learning_rate":          model_cfg["learning_rate"],
             "n_tickers":              int(df["ticker"].nunique()),
+            "conformal_delta":        conformal_delta,
+            "target_coverage":        TARGET_COVERAGE,
             "val_metrics":            val_metrics,
             "test_metrics":           test_metrics,
+            "val_metrics_raw":        val_metrics_raw,
+            "test_metrics_raw":       test_metrics_raw,
             "mlflow_run_id":          run.info.run_id,
         }
         config_path = ckpt_dir / "model_config.json"
@@ -138,12 +159,13 @@ def main(ckpt_path: Path):
 
     # ── Summary ───────────────────────────────────────────────────────────────
     logger.info("=" * 60)
-    logger.info(f"  Val   MAE={val_metrics['mae']:.4f}  "
-                f"DA={val_metrics['directional_accuracy']:.2%}  "
-                f"QC={val_metrics['quantile_coverage']:.2%}")
-    logger.info(f"  Test  MAE={test_metrics['mae']:.4f}  "
-                f"DA={test_metrics['directional_accuracy']:.2%}  "
-                f"QC={test_metrics['quantile_coverage']:.2%}")
+    logger.info(f"  Conformal delta = {conformal_delta:+.6f} (target {TARGET_COVERAGE:.0%})")
+    logger.info(f"  Val  raw QC={val_metrics_raw['quantile_coverage']:.2%}  "
+                f"calibrated QC={val_metrics['quantile_coverage']:.2%}  "
+                f"MAE={val_metrics['mae']:.4f}  DA={val_metrics['directional_accuracy']:.2%}")
+    logger.info(f"  Test raw QC={test_metrics_raw['quantile_coverage']:.2%}  "
+                f"calibrated QC={test_metrics['quantile_coverage']:.2%}  "
+                f"MAE={test_metrics['mae']:.4f}  DA={test_metrics['directional_accuracy']:.2%}")
     logger.info("=" * 60)
 
 
