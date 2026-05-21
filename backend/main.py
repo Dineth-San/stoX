@@ -1,14 +1,23 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.db.database import init_db
+from app.db.seed import seed_if_empty
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # DB init and seeding will be wired in Iteration 2
+    logger.info("startup: initialising database …")
+    await init_db()
+    logger.info("startup: database ready")
+    await seed_if_empty()
     yield
 
 
