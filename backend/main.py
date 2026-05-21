@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db.database import init_db
 from app.db.seed import seed_if_empty
+from app.routers import news, stocks
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +35,10 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+app.include_router(stocks.router, prefix="/stocks",    tags=["stocks"])
+app.include_router(news.router,   prefix="/news",      tags=["news"])
 
 
 @app.get("/health", tags=["meta"])
