@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db.database import init_db
 from app.db.seed import seed_if_empty
-from app.routers import news, stocks
+from app.routers import market, news, stocks
+from app.services.price_service import init_price_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,6 +20,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("startup: database ready")
     await seed_if_empty()
+    logger.info("startup: loading feature panel …")
+    init_price_service()
+    logger.info("startup: feature panel ready")
     yield
 
 
@@ -39,6 +43,7 @@ app.add_middleware(
 
 app.include_router(stocks.router, prefix="/stocks",    tags=["stocks"])
 app.include_router(news.router,   prefix="/news",      tags=["news"])
+app.include_router(market.router, prefix="/market",    tags=["market"])
 
 
 @app.get("/health", tags=["meta"])
