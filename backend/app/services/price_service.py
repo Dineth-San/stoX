@@ -123,6 +123,24 @@ class PriceService:
             return None
         return float(row.iloc[0]["sl20_index"])
 
+    def get_trading_dates(self, n: int) -> list[str]:
+        """Return the last `n` unique trading dates (as YYYY-MM-DD strings) in the panel."""
+        dates = (
+            self._panel["date"]
+            .drop_duplicates()
+            .sort_values()
+            .tail(n)
+        )
+        return [d.strftime("%Y-%m-%d") for d in dates]
+
+    def get_close_on_date(self, ticker: str, date_str: str) -> Optional[float]:
+        """Return the close price for `ticker` on `date_str`, or None if not found."""
+        ts = pd.Timestamp(date_str)
+        row = self._panel[
+            (self._panel["ticker"] == ticker.upper()) & (self._panel["date"] == ts)
+        ]
+        return float(row.iloc[0]["close"]) if not row.empty else None
+
     def get_sl20_index_series(self, dates: list[str]) -> dict[str, float]:
         """Bulk lookup of SL20 index values for a list of date strings."""
         ts_dates = pd.to_datetime(dates)
