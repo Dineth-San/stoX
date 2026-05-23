@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db.database import init_db
 from app.db.seed import seed_if_empty
-from app.routers import market, news, stocks
+from app.routers import market, news, portfolio, stocks
 from app.services.prediction_service import init_prediction_service
 from app.services.price_service import init_price_service
 
@@ -45,9 +45,10 @@ app.add_middleware(
 )
 
 
-app.include_router(stocks.router, prefix="/stocks",    tags=["stocks"])
-app.include_router(news.router,   prefix="/news",      tags=["news"])
-app.include_router(market.router, prefix="/market",    tags=["market"])
+app.include_router(stocks.router,    prefix="/stocks",    tags=["stocks"])
+app.include_router(news.router,      prefix="/news",      tags=["news"])
+app.include_router(market.router,    prefix="/market",    tags=["market"])
+app.include_router(portfolio.router, prefix="/portfolio", tags=["portfolio"])
 
 
 @app.get("/health", tags=["meta"])
