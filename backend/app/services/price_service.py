@@ -37,8 +37,18 @@ class PriceService:
             self._panel["date"].min().date(),
             self._panel["date"].max().date(),
         )
+        # Pre-split by ticker so per-ticker lookups are O(1) dict access
+        # instead of a full 71k-row boolean scan on every request.
+        self._by_ticker: dict[str, pd.DataFrame] = {
+            ticker: grp.sort_values("date").reset_index(drop=True)
+            for ticker, grp in self._panel.groupby("ticker")
+        }
 
     # ── Public helpers ────────────────────────────────────────────────────────
+
+    def _ticker_df(self, ticker: str) -> pd.DataFrame:
+        """Return the pre-sorted per-ticker slice (empty DataFrame if unknown)."""
+        return self._by_ticker.get(ticker.upper(), pd.DataFrame())
 
     def get_price_history(self, ticker: str, days: int = 90) -> list[dict]:
         """
@@ -46,11 +56,7 @@ class PriceService:
         predictedP10/P50/P90 all default to close until the predictions table is
         backfilled in Iteration 6.
         """
-        df = (
-            self._panel[self._panel["ticker"] == ticker.upper()]
-            .sort_values("date")
-            .tail(days)
-        )
+        df = self._ticker_df(ticker).tail(days)
         records = []
         for _, row in df.iterrows():
             close = float(row["close"])
@@ -67,23 +73,23 @@ class PriceService:
 
     def get_52w_stats(self, ticker: str) -> dict:
         """Return high52w, low52w, avgVolume for the 52-week window ending at the latest date."""
-        latest = self._panel["date"].max()
-        cutoff = latest - pd.Timedelta(days=365)
-        df = self._panel[
-            (self._panel["ticker"] == ticker.upper())
-            & (self._panel["date"] >= cutoff)
-        ]
+        df = self._ticker_df(ticker)
         if df.empty:
             return {"high52w": 0.0, "low52w": 0.0, "avgVolume": 0.0}
+        latest = df["date"].max()
+        cutoff = latest - pd.Timedelta(days=365)
+        df52 = df[df["date"] >= cutoff]
+        if df52.empty:
+            return {"high52w": 0.0, "low52w": 0.0, "avgVolume": 0.0}
         return {
-            "high52w": float(df["close"].max()),
-            "low52w": float(df["close"].min()),
-            "avgVolume": float(df["volume"].mean()),
+            "high52w": float(df52["close"].max()),
+            "low52w": float(df52["close"].min()),
+            "avgVolume": float(df52["volume"].mean()),
         }
 
     def get_latest_close(self, ticker: str) -> Optional[float]:
         """Return the most recent close price for a ticker."""
-        df = self._panel[self._panel["ticker"] == ticker.upper()].sort_values("date")
+        df = self._ticker_df(ticker)
         if df.empty:
             return None
         return float(df.iloc[-1]["close"])
@@ -136,9 +142,8 @@ class PriceService:
     def get_close_on_date(self, ticker: str, date_str: str) -> Optional[float]:
         """Return the close price for `ticker` on `date_str`, or None if not found."""
         ts = pd.Timestamp(date_str)
-        row = self._panel[
-            (self._panel["ticker"] == ticker.upper()) & (self._panel["date"] == ts)
-        ]
+        df = self._ticker_df(ticker)
+        row = df[df["date"] == ts]
         return float(row.iloc[0]["close"]) if not row.empty else None
 
     def get_sl20_index_series(self, dates: list[str]) -> dict[str, float]:

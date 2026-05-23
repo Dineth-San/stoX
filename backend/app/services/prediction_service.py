@@ -149,17 +149,38 @@ class PredictionService:
     async def get_all_predictions(self, as_of: Optional[str] = None) -> list[dict]:
         if as_of is None:
             as_of = date.today().isoformat()
-        results = []
+
+        # Batch-fetch all cached predictions for `as_of` in one query.
         async with aiosqlite.connect(_db_path()) as db:
-            for ticker in SL20_TICKERS:
-                cached = await self._get_cached(db, ticker, as_of)
-                if cached:
-                    last_close = self._get_last_close(ticker)
-                    results.append({**cached, "last_close": last_close, "ticker": ticker})
-                else:
-                    preds = await self._compute(ticker, as_of)
+            placeholders = ",".join("?" * len(SL20_TICKERS))
+            cur = await db.execute(
+                f"SELECT ticker, p10, p50, p90, signal FROM predictions "
+                f"WHERE date=? AND ticker IN ({placeholders})",
+                [as_of] + list(SL20_TICKERS),
+            )
+            rows = await cur.fetchall()
+        cached_map: dict[str, dict] = {
+            row[0]: {"p10": row[1], "p50": row[2], "p90": row[3], "signal": row[4]}
+            for row in rows
+        }
+
+        # For any cache miss, compute + persist (rare after seed).
+        misses: list[tuple[str, dict]] = []
+        results: list[dict] = []
+        for ticker in SL20_TICKERS:
+            if ticker in cached_map:
+                last_close = self._get_last_close(ticker)
+                results.append({**cached_map[ticker], "last_close": last_close, "ticker": ticker})
+            else:
+                preds = await self._compute(ticker, as_of)
+                misses.append((ticker, preds))
+                results.append({**preds, "ticker": ticker})
+
+        if misses:
+            async with aiosqlite.connect(_db_path()) as db:
+                for ticker, preds in misses:
                     await self._insert_cached(db, ticker, as_of, preds)
-                    results.append({**preds, "ticker": ticker})
+
         return results
 
     # ── Prefill helpers (called from seed.py) ────────────────────────────────
