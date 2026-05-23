@@ -50,13 +50,16 @@ def derive_signal(predicted_change_percent: float) -> str:
 
 # ── Mock helpers ──────────────────────────────────────────────────────────────
 
-def _mock_p50_change_pct(ticker: str) -> float:
-    h = int(hashlib.md5(ticker.upper().encode()).hexdigest(), 16)
+def _mock_p50_change_pct(ticker: str, date: str = "") -> float:
+    """Deterministic % change.  Including `date` in the hash makes signals
+    vary day-by-day, giving the backtest realistic BUY/SELL diversity."""
+    key = (ticker.upper() + date).encode()
+    h = int(hashlib.md5(key).hexdigest(), 16)
     return ((h % 301) - 150) / 100
 
 
-def _mock_predictions(ticker: str, last_close: float) -> dict:
-    p50_chg = _mock_p50_change_pct(ticker)
+def _mock_predictions(ticker: str, last_close: float, date: str = "") -> dict:
+    p50_chg = _mock_p50_change_pct(ticker, date)
     p50 = round(last_close * (1 + p50_chg / 100), 4)
     p10 = round(last_close * (1 - 0.015), 4)
     p90 = round(last_close * (1 + 0.015), 4)
@@ -232,7 +235,7 @@ class PredictionService:
                     close = price_svc.get_close_on_date(ticker, date_str)
                     if close is None:
                         continue
-                    preds = _mock_predictions(ticker, close)
+                    preds = _mock_predictions(ticker, close, date=date_str)
                     rows_to_insert.append(
                         (date_str, ticker, preds["p10"], preds["p50"],
                          preds["p90"], preds["signal"], MODEL_VERSION)

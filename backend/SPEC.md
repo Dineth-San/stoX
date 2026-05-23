@@ -279,6 +279,83 @@ Tasks (backend side only):
 
 ---
 
+### Iteration 11 — Daily data refresh pipeline (≈2 h)
+
+**Goal:** the app displays *today's* predictions rather than a frozen snapshot from 2025-12-31.
+This iteration has three sequential sub-steps that must be done in order.
+
+---
+
+#### Sub-step A — Keep existing iterations as-is (document static-data limitation)
+*No code change — documentation only.*
+
+- Add a `KNOWN_LIMITATIONS.md` (or section in `README.md`) stating:
+  - The feature panel (`ml/data/features/sl20_feature_panel.parquet`) is static. Until the daily pipeline (sub-steps B & C) is running, predictions always reflect the last date in the panel (2025-12-31).
+  - The backend is designed to be stateless with respect to data: swap the parquet file and restart to get fresh predictions.
+- Note the CSE data constraint: **end-of-day data only, no WebSockets or intraday feeds**.
+
+**Acceptance:** `backend/README.md` contains a "Static data / daily refresh" section that explains the limitation and the manual workaround (regenerate parquet → restart server).
+
+---
+
+#### Sub-step B — Daily refresh endpoint + APScheduler cron job
+*Stays entirely within `backend/`.*
+
+Tasks:
+- Add `apscheduler>=3.10.0` to `requirements.txt`.
+- Create `app/services/refresh_service.py`:
+  - `refresh_predictions() -> int` — calls `pred_svc.prefill_today()` with today's date; returns rows inserted.
+  - Skips if predictions for today already exist (INSERT OR IGNORE handles it).
+- Wire a **POST `/admin/refresh`** endpoint in a new `app/routers/admin.py`:
+  - No auth for now (internal use only); add a note that production should gate this behind a secret header.
+  - Calls `refresh_predictions()`, returns `{"inserted": N, "date": "YYYY-MM-DD"}`.
+- Register an **APScheduler `AsyncIOScheduler`** in `main.py` lifespan:
+  - Job: `refresh_predictions()` daily at **18:30 Asia/Colombo** (30 min after CSE close at 14:30 UTC+5:30, i.e. 18:30 LKT = 13:00 UTC).
+  - Log: `"scheduler: daily refresh triggered"`.
+  - Scheduler starts after `seed_if_empty()` in lifespan; shuts down on app exit.
+- Add `scheduler` to the External Touch-Points table in this spec.
+
+**Acceptance:**
+- `POST /admin/refresh` returns 200 with `{"inserted": 0, "date": "..."}` (0 because today's predictions already exist from seed).
+- Server log shows scheduler registered on startup.
+- Changing the cron expression to `*/1 * * * *` (every minute) and restarting confirms the job fires and logs `"scheduler: daily refresh triggered"`.
+
+---
+
+#### Sub-step C — OHLCV fetch + feature engineering (touches `ml/`)
+*Requires explicit user approval before editing anything outside `backend/`.*
+
+> **⚠️ This sub-step edits files in `ml/` — stop and ask the user before starting it.**
+
+High-level plan (details to be fleshed out when the iteration runs):
+
+1. **Data source** — Identify a free end-of-day OHLCV source for CSE tickers (options: Yahoo Finance via `yfinance`, a manual CSV upload endpoint, or a scraper for the CSE website). Confirm with user before implementing.
+2. **Fetch script** — `ml/scripts/fetch_daily_ohlcv.py`:
+   - Downloads yesterday's OHLCV for all 20 SL20 tickers.
+   - Appends to a raw CSV/parquet staging file (`ml/data/raw/daily_ohlcv.csv`).
+3. **Feature engineering** — Extend `ml/scripts/build_features.py` (or equivalent) to:
+   - Read the staging file.
+   - Compute the same ~127 feature columns already in `sl20_feature_panel.parquet`.
+   - Append the new row(s) to the panel.
+4. **Pipeline trigger** — `refresh_service.py` (from sub-step B) calls the fetch + feature scripts *before* running inference, so the full daily job is:
+   `fetch OHLCV → build features → run_inference() → cache in DB`.
+5. **Scheduling** — The APScheduler job from sub-step B is updated to run the full pipeline instead of just inference.
+
+**Out-of-backend files modified (user must approve each):**
+| File | Change |
+|------|--------|
+| `ml/scripts/fetch_daily_ohlcv.py` | New file |
+| `ml/scripts/build_features.py` | New or extended |
+| `ml/data/features/sl20_feature_panel.parquet` | Appended daily |
+| `ml/data/raw/daily_ohlcv.csv` | New staging file |
+
+**Acceptance:**
+- Running the fetch + feature script manually produces a parquet with one more date appended.
+- `POST /admin/refresh` after a new parquet is in place produces `{"inserted": 20}`.
+- The frontend `/predictions` page shows today's date and fresh P50 values.
+
+---
+
 ### Out-of-backend changes the user must approve
 
 At time of writing, none are strictly required. Listed here as a checklist so nothing silently breaks the handoff.
