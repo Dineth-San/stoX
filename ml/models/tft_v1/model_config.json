@@ -1,32 +1,48 @@
 {
   "model_version": "tft_v1",
   "checkpoint": "/content/drive/MyDrive/stoX_models/tft_v1/best.ckpt",
-  "encoder_length": 60,
+  "encoder_length": 90,
   "prediction_length": 1,
-  "hidden_size": 64,
-  "attention_head_size": 4,
-  "dropout": 0.1,
-  "hidden_continuous_size": 32,
+  "hidden_size": 128,
+  "attention_head_size": 8,
+  "dropout": 0.2,
+  "hidden_continuous_size": 64,
   "quantiles": [
     0.1,
     0.5,
     0.9
   ],
-  "learning_rate": 0.003,
+  "learning_rate": 0.0005,
   "n_tickers": 20,
+  "conformal_delta": 0.0056288521736860275,
+  "target_coverage": 0.9,
   "val_metrics": {
-    "mae": 0.020394332706928253,
-    "rmse": 0.03255714103579521,
-    "mape": 1.0006117820739746,
-    "directional_accuracy": 0.4823635138171197,
-    "quantile_coverage": 0.7148955290945855
+    "mae": 0.011871960014104843,
+    "rmse": 0.0191208403557539,
+    "mape": 1.0360760688781738,
+    "directional_accuracy": 0.45404372744640203,
+    "quantile_coverage": 0.9004457652303121
   },
   "test_metrics": {
-    "mae": 0.015675324946641922,
-    "rmse": 0.16559773683547974,
-    "mape": 1.0670720338821411,
-    "directional_accuracy": 0.431438127090301,
-    "quantile_coverage": 0.8653668255888423
+    "mae": 0.011499984189867973,
+    "rmse": 0.01825643889605999,
+    "mape": 1.0303860902786255,
+    "directional_accuracy": 0.4313669679072084,
+    "quantile_coverage": 0.9119760905144809
   },
-  "mlflow_run_id": "1beda1faacfd46278500742a21a5e973"
+  "val_metrics_raw": {
+    "mae": 0.011871960014104843,
+    "rmse": 0.0191208403557539,
+    "mape": 1.0360760688781738,
+    "directional_accuracy": 0.45404372744640203,
+    "quantile_coverage": 0.8259392910210146
+  },
+  "test_metrics_raw": {
+    "mae": 0.011499984189867973,
+    "rmse": 0.01825643889605999,
+    "mape": 1.0303860902786255,
+    "directional_accuracy": 0.4313669679072084,
+    "quantile_coverage": 0.8551910624066036
+  },
+  "mlflow_run_id": "182ffa0560bc4d8ab2d214cc66d9d213"
 }
