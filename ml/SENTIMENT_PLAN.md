@@ -16,13 +16,27 @@ The sentiment model is a **post-hoc adjustment layer**. The TFT remains the sour
 
 | Source | Coverage | How to fetch | Notes |
 |--------|----------|--------------|-------|
-| **CSE official announcements** | Per-ticker corporate filings, earnings, dividends, board decisions | CSE paid API/portal (user has membership) — confirm exact endpoint | Highest signal-to-noise. These are the events that actually move prices. |
-| **Almas site** *(USER TO CONFIRM EXACT URL)* | Local SL financial news, market commentary | RSS feed if available, otherwise BeautifulSoup scrape | If "Almas" was a misremembering, likely candidates: `adaderana.lk`, `ft.lk` (Daily FT), `echelon.lk`, `dailymirror.lk/business` |
-| *(Optional later)* GDELT | Global news mentioning SL economy / tickers | Free GDELT 2.0 API | Already wired in `pipeline.yaml` paths — broad coverage, noisy |
+| **CSE announcements** | Corporate filings, earnings, dividends, AGM decisions, IPOs | Unofficial POST API at `https://www.cse.lk/api/` — **no auth required** | Highest signal-to-noise. Structured JSON. 4 endpoints documented. |
+| **Almas Equities** | Market news and commentary | `one.almasequities.com/dl/Home` — **React SPA, requires Playwright + login** | User has paid membership. Store credentials in `ml/.env`. |
+| *(Optional later)* GDELT | Global news mentioning SL | Free GDELT 2.0 API | Already in `pipeline.yaml` paths. Broad coverage, noisy. |
 
-**Action item for user:** Before Claude Code starts, confirm:
-1. CSE API endpoint and auth method
-2. The exact URL of the "Almas" site (and whether it's RSS-accessible or needs scraping)
+### CSE API details (confirmed)
+- **Base URL:** `https://www.cse.lk/api/`
+- **Method:** POST with `application/x-www-form-urlencoded` body — no authentication
+- **Announcement endpoints used:**
+  - `approvedAnnouncement` — dividends, AGMs, rights issues, board decisions
+  - `getFinancialAnnouncement` — annual/interim reports
+  - `getNewListingsRelatedNoticesAnnouncements` — IPOs, new listings
+  - `getNonComplianceAnnouncements` — regulatory / compliance notices
+- **Per-ticker lookup:** `companyInfoSummery` with body `symbol=JKH.N0000`
+- **Symbol format:** `TICKER.N0000` for ordinary shares (e.g. `JKH.N0000`, `COMB.N0000`)
+
+### Almas details (confirmed)
+- URL: `https://one.almasequities.com/dl/Home`
+- Login page: `https://one.almasequities.com/dl/Login`
+- **JavaScript SPA — WebFetch/requests see nothing.** Must use Playwright.
+- Credentials go in `ml/.env` as `ALMAS_EMAIL` and `ALMAS_PASSWORD`
+- CSS selectors in `news.py` are best-guess — **must be verified by inspecting the live DOM once logged in** (right-click a news item → Inspect in Chrome DevTools)
 
 ---
 
