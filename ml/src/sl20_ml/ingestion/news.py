@@ -73,32 +73,67 @@ _SYMBOL_TO_TICKER: dict[str, str] = {
     v.split(".")[0]: k for k, v in CSE_SYMBOL_MAP.items()
 }
 
-# Company name fragments → ticker (for text-based tagging in Almas)
+# Company name fragments → ticker (for text-based tagging).
+# Ordered longest-first to avoid short matches shadowing long ones.
+# CSE returns full legal names like "HATTON NATIONAL BANK PLC" —
+# fragments are checked as substrings of lowercased text.
 COMPANY_NAME_MAP: dict[str, str] = {
-    "john keells":          "JKH",
-    "commercial bank":      "COMB",
-    "dialog":               "DIAL",
-    "sampath":              "SAMP",
-    "hayleys":              "HAYL",
-    "ceylon tobacco":       "CTC",
-    "hatton national":      "HNB",
-    "lanka ioc":            "LIOC",
-    "lioc":                 "LIOC",
-    "spen":                 "SPEN",
-    "dfcc":                 "DFCC",
-    "nations trust":        "NTB",
-    "ntb":                  "NTB",
-    "bukit":                "BUKI",
-    "cargo":                "CARG",
-    "cargills":             "CARG",
-    "ccs":                  "CCS",
-    "hela":                 "HHL",
-    "lion brewery":         "LION",
-    "melstacorp":           "MELS",
-    "tokyo cement":         "TKYO",
-    "vallibel one":         "VONE",
-    "ael":                  "AEL",
-    "access engineering":   "AEL",
+    # JKH
+    "john keells holdings":     "JKH",
+    "john keells":              "JKH",
+    # COMB
+    "commercial bank of ceylon": "COMB",
+    "commercial bank":          "COMB",
+    # DIAL
+    "dialog axiata":            "DIAL",
+    "dialog":                   "DIAL",
+    # SAMP
+    "sampath bank":             "SAMP",
+    "sampath":                  "SAMP",
+    # HAYL
+    "hayleys":                  "HAYL",
+    # CTC
+    "ceylon tobacco":           "CTC",
+    # HNB
+    "hatton national bank":     "HNB",
+    "hnb finance":              "HNB",
+    "hnb":                      "HNB",
+    # LIOC
+    "lanka ioc":                "LIOC",
+    "lioc":                     "LIOC",
+    # SPEN
+    "softlogic life":           "SPEN",
+    "spen":                     "SPEN",
+    # DFCC
+    "dfcc bank":                "DFCC",
+    "dfcc":                     "DFCC",
+    # NTB
+    "nations trust bank":       "NTB",
+    "nations trust":            "NTB",
+    "ntb":                      "NTB",
+    # BUKI
+    "bukit darah":              "BUKI",
+    "buki":                     "BUKI",
+    # CARG
+    "cargills (ceylon)":        "CARG",
+    "cargills ceylon":          "CARG",
+    "cargills":                 "CARG",
+    # CCS
+    "ccs":                      "CCS",
+    # HHL
+    "hela apparel":             "HHL",
+    "hhl":                      "HHL",
+    # LION
+    "lion brewery":             "LION",
+    # MELS
+    "melstacorp":               "MELS",
+    # TKYO
+    "tokyo cement":             "TKYO",
+    # VONE
+    "vallibel one":             "VONE",
+    # AEL
+    "access engineering":       "AEL",
+    "ael":                      "AEL",
 }
 
 
@@ -178,6 +213,30 @@ class CSEFetcher:
             logger.warning(f"CSE API error [{endpoint}]: {exc}")
             return None
 
+    @staticmethod
+    def _parse_date(item: dict) -> pd.Timestamp:
+        """
+        Parse date from a CSE API item. Field names and formats vary:
+          - createdDate       : Unix ms integer  e.g. 1780675552000
+                                OR string         e.g. "08 May 2026 05:02:54 PM"
+          - dateOfAnnouncement: string            e.g. "05 Jun 2026"
+          - uploadedDate      : string            e.g. "05 Jun 2026 09:23:12 PM"
+          - manualDate        : Unix ms integer
+        Priority: dateOfAnnouncement > uploadedDate > createdDate > manualDate
+        """
+        for field in ("dateOfAnnouncement", "uploadedDate", "createdDate", "manualDate"):
+            val = item.get(field)
+            if val is None:
+                continue
+            try:
+                if isinstance(val, (int, float)) and val > 1e10:
+                    # Unix timestamp in milliseconds
+                    return pd.Timestamp(val, unit="ms", tz="UTC")
+                return pd.to_datetime(str(val), utc=True)
+            except Exception:
+                continue
+        return pd.Timestamp.now(tz="UTC")
+
     def _parse_announcement_response(
         self,
         payload: Any,
@@ -185,13 +244,19 @@ class CSEFetcher:
     ) -> list[dict]:
         """
         Extract rows from a CSE announcement JSON response.
-        Field names vary by endpoint — we capture everything defensively.
+        Each endpoint has different field names — handled explicitly below.
+
+        Confirmed field shapes (from live API inspection):
+          approved   : {id, createdDate(ms), dateOfAnnouncement, announcementCategory,
+                        company, symbol(null), remarks, logoUrl}
+          financial  : {id, path(PDF), manualDate(ms), uploadedDate, fileText,
+                        name, symbol(str), logoUrl}
+          listing    : {id, createdDate(str), announcementCategory, company, remarks}
+          noncompliance: similar to approved
         """
         if payload is None:
             return []
 
-        # The response is a dict with one top-level list key
-        # e.g. {"approvedAnnouncements": [...]}  or  {"reqFinancialAnnouncemnets": [...]}
         rows_raw: list[dict] = []
         if isinstance(payload, dict):
             for v in payload.values():
@@ -206,51 +271,62 @@ class CSEFetcher:
             if not isinstance(item, dict):
                 continue
 
-            # Try to extract date from common field names
-            raw_date = (
-                item.get("announcementDate")
-                or item.get("date")
-                or item.get("publishedDate")
-                or item.get("createdDate")
-                or ""
-            )
-            try:
-                date = pd.to_datetime(raw_date, utc=True)
-            except Exception:
-                date = pd.Timestamp.now(tz="UTC")
+            date = self._parse_date(item)
 
-            # Headline / subject
-            headline = (
-                item.get("subject")
-                or item.get("fileText")
-                or item.get("title")
-                or item.get("companyName", "")
-                or item.get("company", "")
-            )
+            # ── Headline: endpoint-specific ───────────────────────────────
+            if annct_type == "financial":
+                # fileText = "Annual Report as at 31st March 2026"
+                # name     = company name
+                file_text = item.get("fileText") or ""
+                company   = item.get("name") or ""
+                headline  = f"{file_text} — {company}" if file_text else company
 
-            # URL to the announcement (often a PDF)
-            url = (
-                item.get("pdfLink")
-                or item.get("url")
-                or item.get("link")
-                or f"{self.BASE_URL}/{annct_type}/{item.get('id', '')}"
-            )
+            elif annct_type in ("approved", "noncompliance"):
+                # announcementCategory = "ANNUAL GENERAL MEETING - INITIAL"
+                # company = company name
+                category = item.get("announcementCategory") or ""
+                company  = item.get("company") or ""
+                headline = f"{category} — {company}" if category else company
+                # remarks may have extra context
+                remarks  = item.get("remarks") or ""
 
-            # Body text (often empty for CSE — headline is sufficient)
-            body = item.get("body") or item.get("content") or ""
+            elif annct_type == "listing":
+                # remarks has the real content
+                remarks  = item.get("remarks") or ""
+                category = item.get("announcementCategory") or ""
+                company  = item.get("company") or ""
+                headline = remarks or f"{category} — {company}"
 
-            # Try to figure out which ticker this is for
-            symbol_field = (
-                item.get("symbol")
-                or item.get("companySymbol")
-                or item.get("ticker")
-                or ""
+            else:
+                headline = (
+                    item.get("fileText") or item.get("subject")
+                    or item.get("title") or item.get("remarks")
+                    or item.get("company") or ""
+                )
+
+            # ── Body: remarks field where available ───────────────────────
+            body = item.get("remarks") or item.get("content") or ""
+            if annct_type == "listing":
+                body = ""  # remarks already used as headline for listings
+
+            # ── URL: financial has a PDF path ─────────────────────────────
+            if annct_type == "financial" and item.get("path"):
+                url = f"https://www.cse.lk/{item['path']}"
+            else:
+                url = (
+                    item.get("pdfLink") or item.get("url") or item.get("link")
+                    or f"https://www.cse.lk/api/{annct_type}/{item.get('id', '')}"
+                )
+
+            # ── Ticker: symbol field (no suffix) takes priority ───────────
+            symbol_raw = (
+                item.get("symbol") or item.get("companySymbol") or ""
             )
-            symbol_prefix = symbol_field.split(".")[0].upper() if symbol_field else ""
+            symbol_prefix = symbol_raw.split(".")[0].upper() if symbol_raw else ""
             ticker = (
                 _SYMBOL_TO_TICKER.get(symbol_prefix)
                 or _tag_ticker(headline)
-                or _tag_ticker(str(item.get("company") or item.get("companyName") or ""))
+                or _tag_ticker(str(item.get("company") or item.get("name") or ""))
             )
 
             rows.append({
@@ -299,114 +375,138 @@ class AlmasFetcher:
     Install: pip install playwright && playwright install chromium
     """
 
-    LOGIN_URL = "https://one.almasequities.com/dl/Login"
-    HOME_URL  = "https://one.almasequities.com/dl/Home"
+    LOGIN_URL    = "https://one.almasequities.com/dl/Login"
+    HOME_URL     = "https://one.almasequities.com/dl/Home"
+    SESSION_FILE = Path(__file__).parents[4] / "data" / "raw" / "news" / "almas_session.json"
 
-    # CSS selectors — UPDATE THESE after inspecting the live DOM.
-    # In Chrome DevTools: open Home, right-click a news item → Inspect.
-    # These are best-guess patterns for a typical React news list.
+    # CSS selectors for the news feed (update after inspecting live DOM)
     SELECTORS = {
-        "email_input":    'input[type="email"], input[name="email"], input[placeholder*="mail" i]',
-        "password_input": 'input[type="password"]',
-        "login_button":   'button[type="submit"], button:has-text("Login"), button:has-text("Sign In")',
-        # After login, news items — inspect the DOM to confirm these:
-        "news_list":      '.news-item, .news-row, [class*="news"], [class*="News"], tr.news, li.news',
-        "headline":       'a, .headline, .title, [class*="title" i], [class*="subject" i]',
-        "date":           '.date, [class*="date" i], time',
-        "link":           'a[href]',
+        "email_input": 'input[type="email"], input[name="email"], input[placeholder*="mail" i]',
+        "news_list":   '.news-item, .news-row, [class*="news"], [class*="News"], tr, li',
+        "headline":    'a, .headline, .title, [class*="title" i], [class*="subject" i]',
+        "date":        '.date, [class*="date" i], time',
+        "link":        'a[href]',
     }
 
     def __init__(self, headless: bool = True, max_articles: int = 200):
         self.headless     = headless
         self.max_articles = max_articles
         self.email        = os.getenv("ALMAS_EMAIL", "")
-        self.password     = os.getenv("ALMAS_PASSWORD", "")
+
+    def setup_session(self) -> None:
+        """
+        Open a VISIBLE browser so you can log in manually.
+        Almas uses OTP/PIN login — it emails a PIN after you submit your email.
+
+        Steps:
+          1. This opens a Chrome window at the Almas login page
+          2. Enter your email and click Continue
+          3. Check your email inbox for the PIN
+          4. Enter the PIN in the browser
+          5. Once you reach the Home page, press Enter in this terminal
+          6. Session cookies are saved to almas_session.json for future headless runs
+
+        Run once:
+          python build_news_ingest.py --setup-almas-session
+        """
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            raise RuntimeError("playwright not installed. Run: pip install playwright && python -m playwright install chromium")
+
+        print("\n" + "="*60)
+        print("ALMAS SESSION SETUP")
+        print("="*60)
+        print("A browser window will open. Please:")
+        print("  1. Enter your email and click Continue")
+        print("  2. Check your inbox for the PIN/OTP code")
+        print("  3. Enter the PIN in the browser")
+        print("  4. Wait until you see the Home page (charts, news)")
+        print("  5. Come back here and press Enter")
+        print("="*60 + "\n")
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=False)
+            ctx     = browser.new_context()
+            page    = ctx.new_page()
+
+            # Pre-fill email to save the user a step
+            page.goto(self.LOGIN_URL, wait_until="domcontentloaded", timeout=30_000)
+            try:
+                page.fill(self.SELECTORS["email_input"], self.email)
+            except Exception:
+                pass  # fine — user can type it manually
+
+            input("\nPress Enter once you are logged in and can see the Home page... ")
+
+            # Save full browser storage state (cookies + localStorage)
+            self.SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+            ctx.storage_state(path=str(self.SESSION_FILE))
+            print(f"Session saved to {self.SESSION_FILE}")
+            browser.close()
 
     def fetch(self) -> list[dict]:
         """
-        Launch Playwright, log in, scrape news feed, return normalised rows.
-
-        Raises RuntimeError if credentials are missing or login fails.
+        Scrape Almas news feed using a saved session.
+        Run setup_session() first (once) to create the session file.
         """
-        if not self.email or not self.password:
+        if not self.SESSION_FILE.exists():
             raise RuntimeError(
-                "ALMAS_EMAIL and ALMAS_PASSWORD must be set in .env — "
-                "see ml/.env.example"
+                f"No Almas session found at {self.SESSION_FILE}.\n"
+                "Run this once to log in and save the session:\n"
+                "  python build_news_ingest.py --setup-almas-session"
             )
 
         try:
             from playwright.sync_api import sync_playwright, TimeoutError as PwTimeout
         except ImportError:
-            raise RuntimeError(
-                "playwright not installed. Run:\n"
-                "  pip install playwright\n"
-                "  playwright install chromium"
-            )
+            raise RuntimeError("playwright not installed. Run: pip install playwright && python -m playwright install chromium")
 
         rows: list[dict] = []
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=self.headless)
-            ctx     = browser.new_context()
-            page    = ctx.new_page()
+            # Restore the saved login session
+            ctx  = browser.new_context(storage_state=str(self.SESSION_FILE))
+            page = ctx.new_page()
 
-            # ── Step 1: Log in ─────────────────────────────────────────────
-            logger.info("Almas → navigating to login page ...")
-            page.goto(self.LOGIN_URL, wait_until="networkidle", timeout=30_000)
+            logger.info("Almas → loading Home with saved session ...")
+            page.goto(self.HOME_URL, wait_until="networkidle", timeout=30_000)
 
-            try:
-                page.fill(self.SELECTORS["email_input"],    self.email)
-                page.fill(self.SELECTORS["password_input"], self.password)
-                page.click(self.SELECTORS["login_button"])
-                # Wait for navigation to the home page after login
-                page.wait_for_url("**/Home**", timeout=15_000)
-                logger.info("Almas → login successful")
-            except PwTimeout:
-                # Try a fallback: maybe we're already on Home
-                if "Home" not in page.url:
-                    # Save a debug screenshot so you can see what went wrong
-                    page.screenshot(path="almas_login_debug.png")
-                    raise RuntimeError(
-                        "Almas login timed out. Check credentials in .env. "
-                        "Screenshot saved to almas_login_debug.png"
-                    )
-
-            # ── Step 2: Wait for news content to render ─────────────────
-            logger.info("Almas → waiting for news feed ...")
-            try:
-                # Wait for any element matching the news selector
-                page.wait_for_selector(
-                    self.SELECTORS["news_list"],
-                    timeout=20_000,
-                    state="visible",
+            # If we got redirected to Login, session has expired
+            if "Login" in page.url or "login" in page.url:
+                page.screenshot(path="almas_session_expired.png")
+                browser.close()
+                raise RuntimeError(
+                    "Almas session has expired. Re-run setup:\n"
+                    "  python build_news_ingest.py --setup-almas-session"
                 )
+
+            # Wait for news content to render
+            try:
+                page.wait_for_selector(self.SELECTORS["news_list"], timeout=20_000, state="visible")
             except PwTimeout:
                 page.screenshot(path="almas_home_debug.png")
                 logger.warning(
-                    "Almas → news selector not found. "
-                    "DOM screenshot saved to almas_home_debug.png. "
-                    "Update SELECTORS in news.py after inspecting the screenshot."
+                    "Almas → news selector not found. Screenshot saved to almas_home_debug.png. "
+                    "Update SELECTORS['news_list'] in news.py after inspecting the DOM."
                 )
                 browser.close()
                 return []
 
-            # ── Step 3: Extract news items ───────────────────────────────
             news_elements = page.query_selector_all(self.SELECTORS["news_list"])
-            logger.info(f"Almas → found {len(news_elements)} news elements")
+            logger.info(f"Almas → found {len(news_elements)} elements, extracting news ...")
 
             for el in news_elements[: self.max_articles]:
                 try:
-                    # Headline text
                     headline_el = el.query_selector(self.SELECTORS["headline"])
                     headline    = headline_el.inner_text().strip() if headline_el else ""
 
-                    # Link href
                     link_el = el.query_selector(self.SELECTORS["link"])
                     href    = link_el.get_attribute("href") or "" if link_el else ""
                     if href and not href.startswith("http"):
                         href = "https://one.almasequities.com" + href
 
-                    # Date text
                     date_el  = el.query_selector(self.SELECTORS["date"])
                     date_str = date_el.inner_text().strip() if date_el else ""
                     try:
@@ -417,14 +517,12 @@ class AlmasFetcher:
                     if not headline:
                         continue
 
-                    ticker = _tag_ticker(headline)
-
                     rows.append({
                         "date":       date,
                         "source":     "almas",
-                        "ticker":     ticker,
+                        "ticker":     _tag_ticker(headline),
                         "headline":   headline,
-                        "body":       "",       # body requires clicking into article
+                        "body":       "",
                         "url":        href,
                         "url_hash":   _url_hash(href or headline),
                         "annct_type": "news",

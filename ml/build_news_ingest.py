@@ -7,17 +7,21 @@ Fetches raw news from two sources and saves to:
 Sources
 -------
   cse   : CSE official announcements (POST API, no auth)
-  almas : Almas Equities news feed (Playwright + login)
+  almas : Almas Equities news feed (Playwright + saved session)
 
 Usage
 -----
-  python build_news_ingest.py             # both sources
-  python build_news_ingest.py --cse-only  # skip Almas (no credentials yet)
-  python build_news_ingest.py --headful   # show browser window (Almas debug)
+  # First-time Almas setup — opens a browser for you to log in manually:
+  python build_news_ingest.py --setup-almas-session
 
-Before running Almas scraping, set credentials in ml/.env:
-  ALMAS_EMAIL=your@email.com
-  ALMAS_PASSWORD=yourpassword
+  # Normal run (both sources):
+  python build_news_ingest.py
+
+  # CSE only (skip Almas):
+  python build_news_ingest.py --cse-only
+
+  # Almas only:
+  python build_news_ingest.py --almas-only
 
 Output schema
 -------------
@@ -37,10 +41,9 @@ try:
     from dotenv import load_dotenv
     load_dotenv(ML_DIR / ".env")
 except ImportError:
-    pass  # python-dotenv optional — set env vars manually if not installed
+    pass
 
 from sl20_ml.ingestion.news import CSEFetcher, AlmasFetcher, save_raw
-from sl20_ml.utils.config import load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,10 +57,17 @@ OUTPUT_PATH = ML_DIR / "data" / "raw" / "news" / "raw_news.parquet"
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch raw news for SL20 stocks")
-    parser.add_argument("--cse-only",   action="store_true", help="Skip Almas (use when no credentials)")
+    parser.add_argument("--setup-almas-session", action="store_true",
+                        help="Open browser to log in to Almas and save the session (run once)")
+    parser.add_argument("--cse-only",   action="store_true", help="Skip Almas")
     parser.add_argument("--almas-only", action="store_true", help="Skip CSE")
-    parser.add_argument("--headful",    action="store_true", help="Show browser window when scraping Almas")
+    parser.add_argument("--headful",    action="store_true", help="Show browser window (Almas debug)")
     args = parser.parse_args()
+
+    # ── Session setup mode ────────────────────────────────────────────────────
+    if args.setup_almas_session:
+        AlmasFetcher().setup_session()
+        return
 
     logger.info("=" * 60)
     logger.info("stoX — News Ingestion")
