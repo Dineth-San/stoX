@@ -37,6 +37,9 @@ dependencies = [
     "feedparser>=6.0",
     # NLP / sentiment
     "transformers>=4.40",
+    # Web scraping (Almas news feed)
+    "playwright>=1.40",
+    "requests>=2.32",
 ]
 
 [project.optional-dependencies]
