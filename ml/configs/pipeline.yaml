@@ -150,20 +150,23 @@ dvc:
   remote_name:   "local"           # Can be swapped to S3/GCS later
 
 # ── Model (TFT) ───────────────────────────────────────────────────────────────
+# GPU-optimised settings. Assumes CUDA GPU (Colab T4 or better).
+# For CPU-only machines reduce hidden_size→16, hidden_continuous_size→8,
+# max_epochs→20, batch_size→256, early_stopping_patience→5.
 model:
   encoder_length:            60    # Trading days of history fed to the model
   prediction_length:          1    # Predict 1 day ahead
-  hidden_size:               16    # Reduced from 32 → faster on CPU
-  attention_head_size:        2    # Number of multi-head attention heads
+  hidden_size:               64    # Larger model → better capacity (was 16 on CPU)
+  attention_head_size:        4    # More attention heads (was 2 on CPU)
   dropout:                  0.1
-  hidden_continuous_size:     8    # Reduced from 16 → faster on CPU
+  hidden_continuous_size:    32    # Larger continuous embedding (was 8 on CPU)
   quantiles:               [0.1, 0.5, 0.9]   # P10, P50, P90
   learning_rate:           3.0e-3
-  max_epochs:               20    # Reduced from 50 → feasible on CPU (~20 min)
-  batch_size:              256    # Increased from 64 → 4x fewer steps/epoch
-  val_batch_size:          512    # Increased from 128 → faster val pass
-  early_stopping_patience:   5    # Reduced from 10 → stop sooner if not improving
+  max_epochs:              100    # Let early stopping decide; GPU makes this fast
+  batch_size:               64    # Standard batch size on GPU
+  val_batch_size:          128
+  early_stopping_patience:  15    # More patience → finds better optimum
   gradient_clip_val:        0.1
-  reduce_lr_patience:        3    # Reduced from 5
+  reduce_lr_patience:        5
   accelerator:             "auto" # auto → CUDA if available, else CPU
   checkpoint_dir:          "models/tft_v1"

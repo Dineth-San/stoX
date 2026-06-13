@@ -51,9 +51,7 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s  %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
-        logging.StreamHandler(
-            open(sys.stdout.fileno(), mode="w", encoding="utf-8", closefd=False)
-        ),
+        logging.StreamHandler(sys.stdout),  # works in terminal, Jupyter, and Colab
         logging.FileHandler(ML_DIR / "train_model.log", mode="w", encoding="utf-8"),
     ],
 )
