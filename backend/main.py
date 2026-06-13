@@ -8,6 +8,7 @@ from app.config import settings
 from app.db.database import init_db
 from app.db.seed import seed_if_empty
 from app.routers import market, news, stocks
+from app.services.prediction_service import init_prediction_service
 from app.services.price_service import init_price_service
 
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +24,9 @@ async def lifespan(app: FastAPI):
     logger.info("startup: loading feature panel …")
     init_price_service()
     logger.info("startup: feature panel ready")
+    logger.info("startup: initialising prediction service …")
+    init_prediction_service()
+    logger.info("startup: prediction service ready")
     yield
 
 
