@@ -6,7 +6,8 @@ Stages (each is a no-op if data already exists):
              store in predictions table. Falls back to mock if model fails.
   Stage 2 — Historical backfill: insert mock predictions (using actual closes)
              for the last BACKFILL_DAYS trading dates so /history shows bands.
-  Stage 3 — Portfolio simulation: filled in Iteration 7.
+  Stage 3 — Portfolio simulation: walk the same historical dates applying
+             BUY/SELL signals to build a 90-day paper-trading history.
 """
 import logging
 
@@ -91,4 +92,22 @@ async def seed_if_empty() -> None:
             current_hist_rows,
         )
 
-    # Stage 3 (portfolio simulation) wired in Iteration 7
+    # ── Stage 3: portfolio backtest ──────────────────────────────────────────
+    from app.services.portfolio_service import _trades_empty, simulate_backtest
+
+    async with aiosqlite.connect(_db_path()) as _db:
+        empty = await _trades_empty(_db)
+
+    if empty:
+        backtest_dates = sorted(historical_dates) + [today]
+        logger.info(
+            "seed: stage 3 — running portfolio backtest over %d dates …",
+            len(backtest_dates),
+        )
+        stats = await simulate_backtest(backtest_dates)
+        logger.info(
+            "seed: stage 3 complete — %d trades | %d history rows | %d positions | cash=%.2f",
+            stats["trades"], stats["history_rows"], stats["open_positions"], stats["final_cash"],
+        )
+    else:
+        logger.info("seed: trades table not empty — skipping stage 3")

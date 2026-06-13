@@ -120,7 +120,7 @@ _STOCK_INFO_RAW: dict[str, dict] = {
     },
 }
 
-# ── Estimated market cap (LKR millions) and P/E ratios ────────────────────────
+# ── Estimated market cap (LKR, stored as millions below → multiplied ×1e6 before serving) ──
 _KEY_STATS_RAW: dict[str, dict] = {
     "JKH":  {"marketCap": 285_000, "peRatio": 18.5},
     "COMB": {"marketCap": 135_000, "peRatio": 8.2},
@@ -159,5 +159,8 @@ def get_stock_info(ticker: str) -> Optional[StockInfo]:
 
 
 def get_static_key_stats(ticker: str) -> Optional[dict]:
-    """Returns {'marketCap': float, 'peRatio': float|None} or None if unknown."""
-    return STOCK_KEY_STATS_STATIC.get(ticker.upper())
+    """Returns {'marketCap': float (raw LKR), 'peRatio': float|None} or None if unknown."""
+    raw = STOCK_KEY_STATS_STATIC.get(ticker.upper())
+    if raw is None:
+        return None
+    return {"marketCap": raw["marketCap"] * 1_000_000, "peRatio": raw["peRatio"]}
