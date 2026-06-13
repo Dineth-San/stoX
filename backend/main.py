@@ -20,13 +20,13 @@ async def lifespan(app: FastAPI):
     logger.info("startup: initialising database …")
     await init_db()
     logger.info("startup: database ready")
-    await seed_if_empty()
     logger.info("startup: loading feature panel …")
     init_price_service()
     logger.info("startup: feature panel ready")
     logger.info("startup: initialising prediction service …")
     init_prediction_service()
     logger.info("startup: prediction service ready")
+    await seed_if_empty()
     yield
 
 
